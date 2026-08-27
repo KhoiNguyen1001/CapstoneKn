@@ -164,15 +164,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t found = 0;
-
-  for (uint8_t addr = 1; addr < 128; addr++)
-  {
-      if (HAL_I2C_IsDeviceReady(&hi2c3, (addr << 1), 1, 5) == HAL_OK)
-      {
-          found++;
-      }
-  }
   while (1)
   {
     /* USER CODE END WHILE */
