@@ -15,6 +15,7 @@
 #define INA226_MANUFACTURER_ID_EXPECTED 0x5449
 #define INA226_DIE_ID_EXPECTED           0x2260
 
+volatile bool INA226_data_ready = false;
 
 INA226_Status_t INA226_ReadRegister(INA226_HandleTypeDef *dev, uint8_t reg, uint16_t *value)
 {

@@ -16,6 +16,7 @@ extern "C" {
 #include "stdbool.h"
 #include "main.h"
 
+extern volatile bool INA226_data_ready;
 #define INA226_TIMEOUT 300
 
 #define INA226_ADDR   (0x40 << 1)  /* A1=GND, A0=GND */
@@ -94,6 +95,13 @@ typedef struct {
     float               power_lsb;
 } INA226_HandleTypeDef;
 
+/**
+ * @brief Initialize the INA226: set config and set calibration value 
+ *
+ * @param shunt_ohms          normal number 
+ * @param max_expected_amps   esti max charging current
+ * @return true on success, false if the device is not responding
+ */
 INA226_Status_t INA226_Init(INA226_HandleTypeDef *dev,
                              I2C_HandleTypeDef *hi2c,
                              uint16_t i2c_addr_8bit,

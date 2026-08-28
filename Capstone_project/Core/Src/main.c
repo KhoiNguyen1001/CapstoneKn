@@ -23,22 +23,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "../library/ads1115.h"
+#include "../library/INA226.h"
+#include "../library/ili9488.h"
+
 /* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
@@ -52,7 +40,13 @@ UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+ILI9488_HandleTypeDef lcd;
 ads1115_t ads1115a;
+INA226_HandleTypeDef ina226;
+
+float bms_voltage[4];
+float current, shunt_v, bus_v;
+uint16_t ina226_alert_status;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -70,70 +64,19 @@ void Set_SPI_Speed(uint32_t prescaler);
 void load_control(uint8_t relay, GPIO_PinState state);
 /* USER CODE END PFP */
 
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-void Set_SPI_Speed(uint32_t prescaler)
-{
-  __HAL_SPI_DISABLE(&hspi1);
-  hspi1.Init.BaudRatePrescaler = prescaler;
-  HAL_SPI_Init(&hspi1);
-  __HAL_SPI_ENABLE(&hspi1);
-}
-
-void load_control(uint8_t relay, GPIO_PinState state)
-{
-  switch (relay)
-  {
-  case LOAD_CONTROL_RELAY1:
-    HAL_GPIO_WritePin(MCU_RL1_GPIO_Port, MCU_RL1_Pin, state);
-    break;
-  case LOAD_CONTROL_RELAY2:
-    HAL_GPIO_WritePin(MCU_RL2_GPIO_Port, MCU_RL2_Pin, state);
-    break;
-  case LOAD_CONTROL_RELAY3:
-    HAL_GPIO_WritePin(MCU_RL3_GPIO_Port, MCU_RL3_Pin, state);
-    break;
-  case LOAD_CONTROL_RELAY4:
-    HAL_GPIO_WritePin(MCU_RL4_GPIO_Port, MCU_RL4_Pin, state);
-    break;
-  case LOAD_CONTROL_RELAY_ALL:
-    HAL_GPIO_WritePin(MCU_RL1_GPIO_Port, MCU_RL1_Pin, state);
-    HAL_GPIO_WritePin(MCU_RL2_GPIO_Port, MCU_RL2_Pin, state);
-    HAL_GPIO_WritePin(MCU_RL3_GPIO_Port, MCU_RL3_Pin, state);
-    HAL_GPIO_WritePin(MCU_RL4_GPIO_Port, MCU_RL4_Pin, state);
-    break;
-  default:
-    break;
-  }
-}
-/* USER CODE END 0 */
-
 /**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void)
 {
-
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -152,26 +95,42 @@ int main(void)
   HAL_GPIO_WritePin(TFT_BL_GPIO_Port, TFT_BL_Pin, GPIO_PIN_SET);   /* Backlight ON */
   HAL_Delay(200);
 
-  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_64);
-  f_mount(NULL, "", 0);
-  HAL_Delay(100);
-  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
+  char buffer[150]; 
 
   ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
-  ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
-  float raw;
+  INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
+  INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
+  INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
   while (1)
   {
     /* USER CODE END WHILE */
-	if(ADS1115_IsDataReady())
-	{
-		HAL_Delay(1);
-		ADS1115_ReadResult(&ads1115a, &raw);
-	}
+    if(ADS1115_IsDataReady())
+    {
+      HAL_Delay(1);
+      ADS1115_ReadResult(&ads1115a, &bms_voltage[0]);
+      
+      sprintf(buffer, "%.5f V    ", bms_voltage[0]);
+      ILI9488_Print(160, 255, buffer, ILI9488_COLOR_BLACK, ILI9488_COLOR_BLACK, 2);
+    }
+
+    if(INA226_data_ready)
+    {
+      INA226_data_ready = false;
+      INA226_ReadMaskEnable(&ina226, &ina226_alert_status); //status & INA226_MASK_CVRF
+      INA226_ReadShuntVoltage(&ina226, &shunt_v);
+      INA226_ReadCurrent(&ina226, &current);
+      INA226_ReadBusVoltage(&ina226, &bus_v);
+
+      sprintf(buffer, "%.5f A   ", current);
+      ILI9488_Print(160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      sprintf(buffer, "%.5f V   ", bus_v);
+      ILI9488_Print(160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+    }
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -608,17 +567,88 @@ static void MX_GPIO_Init(void)
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    if (GPIO_Pin == ADS1115_INT_Pin) {
-        ads1115_data_ready = true;
-    }
+  if (GPIO_Pin == ADS1115_INT_Pin) {
+    ads1115_data_ready = true;
+  }
+  if (GPIO_Pin == INA226_INT_Pin) {
+    INA226_data_ready = true;
+  }
 }
 
+void load_control(uint8_t relay, GPIO_PinState state)
+{
+  switch (relay)
+  {
+  case LOAD_CONTROL_RELAY1:
+    HAL_GPIO_WritePin(MCU_RL1_GPIO_Port, MCU_RL1_Pin, state);
+    break;
+  case LOAD_CONTROL_RELAY2:
+    HAL_GPIO_WritePin(MCU_RL2_GPIO_Port, MCU_RL2_Pin, state);
+    break;
+  case LOAD_CONTROL_RELAY3:
+    HAL_GPIO_WritePin(MCU_RL3_GPIO_Port, MCU_RL3_Pin, state);
+    break;
+  case LOAD_CONTROL_RELAY4:
+    HAL_GPIO_WritePin(MCU_RL4_GPIO_Port, MCU_RL4_Pin, state);
+    break;
+  case LOAD_CONTROL_RELAY_ALL:
+    HAL_GPIO_WritePin(MCU_RL1_GPIO_Port, MCU_RL1_Pin, state);
+    HAL_GPIO_WritePin(MCU_RL2_GPIO_Port, MCU_RL2_Pin, state);
+    HAL_GPIO_WritePin(MCU_RL3_GPIO_Port, MCU_RL3_Pin, state);
+    HAL_GPIO_WritePin(MCU_RL4_GPIO_Port, MCU_RL4_Pin, state);
+    break;
+  default:
+    break;
+  }
+}
+
+void LCD_TFT_init(void)
+{
+  lcd.hspi = &hspi1;
+
+  lcd.cs_port  = TFT_CS_GPIO_Port;
+  lcd.cs_pin   = TFT_CS_Pin;
+  lcd.dc_port  = TFT_DC_GPIO_Port;
+  lcd.dc_pin   = TFT_DC_Pin;
+  lcd.rst_port = TFT_RST_GPIO_Port;
+  lcd.rst_pin  = TFT_RST_Pin;
+  lcd.bl_port  = TFT_BL_GPIO_Port;
+  lcd.bl_pin   = TFT_BL_Pin;
+
+  ILI9488_Init(&lcd, ILI9488_ROTATION_0);
+  ILI9488_FillScreen(&lcd, ILI9488_COLOR_BLACK);
+  
+  ILI9488_FillRect(5, 45,  310, 2, ILI9488_COLOR_DGRAY);
+  ILI9488_FillRect(5, 135, 310, 2, ILI9488_COLOR_DGRAY);
+  ILI9488_FillRect(5, 295, 310, 2, ILI9488_COLOR_DGRAY);
+  ILI9488_FillRect(5, 420, 310, 2, ILI9488_COLOR_DGRAY);
+
+  ILI9488_Print(20, 15, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(15, 60, "CURRENT:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(15, 100, "BUS VOLT:", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(15, 150, "BATTERY_1:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(15, 185, "BATTERY_2:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(15, 220, "BATTERY_3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(15, 255, "BATTERY_4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(15, 315, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+}
+
+void Set_SPI_Speed(uint32_t prescaler)
+{
+  __HAL_SPI_DISABLE(&hspi1);
+  hspi1.Init.BaudRatePrescaler = prescaler;
+  HAL_SPI_Init(&hspi1);
+  __HAL_SPI_ENABLE(&hspi1);
+}
 /* USER CODE END 4 */
 
 /**
