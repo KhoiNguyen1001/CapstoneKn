@@ -1,32 +1,51 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2026 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 #include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include <string.h>
 #include "../library/ads1115.h"
 #include "../library/INA226.h"
 #include "../library/ili9488.h"
-
+#include "../library/sd_functions.h"
+#include "../library/sd_benchmark.h"
 /* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
@@ -35,23 +54,67 @@ I2C_HandleTypeDef hi2c3;
 
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi3;
+DMA_HandleTypeDef hdma_spi1_tx;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart2;
 
+/* Definitions for LowPriority */
+osThreadId_t LowPriorityHandle;
+const osThreadAttr_t LowPriority_attributes = {
+  .name = "LowPriority",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+/* Definitions for DataAcquisition */
+osThreadId_t DataAcquisitionHandle;
+const osThreadAttr_t DataAcquisition_attributes = {
+  .name = "DataAcquisition",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for myMutex01 */
+osMutexId_t myMutex01Handle;
+const osMutexAttr_t myMutex01_attributes = {
+  .name = "myMutex01"
+};
 /* USER CODE BEGIN PV */
 ILI9488_HandleTypeDef lcd;
 ads1115_t ads1115a;
 INA226_HandleTypeDef ina226;
-
-float bms_voltage[4];
-float current, shunt_v, bus_v;
 uint16_t ina226_alert_status;
+
+typedef struct
+{
+  uint32_t timestamp;
+  float bus_voltage_V;  // 0-20V
+  float current_A;      // 0-30A
+  float cell_voltage_V; // ~4.xxxxx
+  uint8_t cell_id;      // 1-4
+} LogRecord_t;
+
+LogRecord_t LogRecord_data[4];
+float shunt_v;
+
+#define LOG_RECORD_COUNT 250
+#define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
+
+char log_buffer_A[LOG_BUFFER_SIZE];
+char log_buffer_B[LOG_BUFFER_SIZE];
+char buffer[100];
+char current_filename[16];
+
+uint32_t sample_count = 0;
+char *active_buf = log_buffer_A;
+char *flush_buf = NULL;
+size_t active_len = 0;
+size_t flush_len = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
@@ -59,10 +122,25 @@ static void MX_I2C2_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_SPI3_Init(void);
 static void MX_UART4_Init(void);
+void Low_priority(void *argument);
+void Data_Acquisition(void *argument);
+
 /* USER CODE BEGIN PFP */
 void Set_SPI_Speed(uint32_t prescaler);
 void load_control(uint8_t relay, GPIO_PinState state);
+void LCD_TFT_init(void);
+
+FRESULT csv_create_with_header(char *out_filename, size_t out_size);
+FRESULT csv_flush_buffer(const char *filename, const char *buf, size_t len);
+size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogRecord_t *records);
+void on_new_sample(LogRecord_t *records);
+void logging_task(void);
 /* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -70,16 +148,30 @@ void load_control(uint8_t relay, GPIO_PinState state);
   */
 int main(void)
 {
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
   /* Configure the system clock */
   SystemClock_Config();
 
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_SPI1_Init();
   MX_USART2_UART_Init();
   MX_FATFS_Init();
@@ -90,47 +182,104 @@ int main(void)
   MX_UART4_Init();
   /* USER CODE BEGIN 2 */
   load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
-  HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET);   /* Deselect TFT */
-  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);     /* Deselect SD Card */
-  HAL_GPIO_WritePin(TFT_BL_GPIO_Port, TFT_BL_Pin, GPIO_PIN_SET);   /* Backlight ON */
+  HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET); /* Deselect TFT */
+  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);   /* Deselect SD Card */
+  HAL_GPIO_WritePin(TFT_BL_GPIO_Port, TFT_BL_Pin, GPIO_PIN_SET); /* Backlight ON */
   HAL_Delay(200);
 
-  char buffer[150]; 
+  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_2);
+  LCD_TFT_init();
 
   ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
   INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
   INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
   INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
+
+  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_64);
+  sd_mount();
+  if (csv_create_with_header(current_filename, sizeof(current_filename)) == FR_OK)
+  {
+    ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  }
+  else
+    ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
+
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of myMutex01 */
+  myMutex01Handle = osMutexNew(&myMutex01_attributes);
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of LowPriority */
+  LowPriorityHandle = osThreadNew(Low_priority, NULL, &LowPriority_attributes);
+
+  /* creation of DataAcquisition */
+  DataAcquisitionHandle = osThreadNew(Data_Acquisition, NULL, &DataAcquisition_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
+  on_new_sample(&LogRecord_data[0]);
+  logging_task();
   while (1)
   {
-    /* USER CODE END WHILE */
-    if(ADS1115_IsDataReady())
+    if (ADS1115_IsDataReady())
     {
       HAL_Delay(1);
-      ADS1115_ReadResult(&ads1115a, &bms_voltage[0]);
-      
-      sprintf(buffer, "%.5f V    ", bms_voltage[0]);
-      ILI9488_Print(160, 255, buffer, ILI9488_COLOR_BLACK, ILI9488_COLOR_BLACK, 2);
+      ADS1115_ReadResult(&ads1115a, &LogRecord_data[0].cell_voltage_V);
+
+      sprintf(buffer, "%.5f V    ", LogRecord_data[0].cell_voltage_V);
+      ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_BLACK, ILI9488_COLOR_BLACK, 2);
     }
 
-    if(INA226_data_ready)
+    if (INA226_data_ready)
     {
       INA226_data_ready = false;
-      INA226_ReadMaskEnable(&ina226, &ina226_alert_status); //status & INA226_MASK_CVRF
+      INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
       INA226_ReadShuntVoltage(&ina226, &shunt_v);
-      INA226_ReadCurrent(&ina226, &current);
-      INA226_ReadBusVoltage(&ina226, &bus_v);
+      INA226_ReadCurrent(&ina226, &LogRecord_data[0].current_A);
+      INA226_ReadBusVoltage(&ina226, &LogRecord_data[0].bus_voltage_V);
 
-      sprintf(buffer, "%.5f A   ", current);
-      ILI9488_Print(160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-      sprintf(buffer, "%.5f V   ", bus_v);
-      ILI9488_Print(160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      sprintf(buffer, "%.5f A   ", LogRecord_data[0].current_A);
+      ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      sprintf(buffer, "%.5f V   ", LogRecord_data[0].bus_voltage_V);
+      ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
     }
+
+    /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -480,6 +629,22 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -554,7 +719,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : ADS1115_INT_Pin */
   GPIO_InitStruct.Pin = ADS1115_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;//GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(ADS1115_INT_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : SPI3_CS_Pin */
@@ -576,10 +741,12 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if (GPIO_Pin == ADS1115_INT_Pin) {
+  if (GPIO_Pin == ADS1115_INT_Pin)
+  {
     ads1115_data_ready = true;
   }
-  if (GPIO_Pin == INA226_INT_Pin) {
+  if (GPIO_Pin == INA226_INT_Pin)
+  {
     INA226_data_ready = true;
   }
 }
@@ -615,32 +782,167 @@ void LCD_TFT_init(void)
 {
   lcd.hspi = &hspi1;
 
-  lcd.cs_port  = TFT_CS_GPIO_Port;
-  lcd.cs_pin   = TFT_CS_Pin;
-  lcd.dc_port  = TFT_DC_GPIO_Port;
-  lcd.dc_pin   = TFT_DC_Pin;
+  lcd.cs_port = TFT_CS_GPIO_Port;
+  lcd.cs_pin = TFT_CS_Pin;
+  lcd.dc_port = TFT_DC_GPIO_Port;
+  lcd.dc_pin = TFT_DC_Pin;
   lcd.rst_port = TFT_RST_GPIO_Port;
-  lcd.rst_pin  = TFT_RST_Pin;
-  lcd.bl_port  = TFT_BL_GPIO_Port;
-  lcd.bl_pin   = TFT_BL_Pin;
+  lcd.rst_pin = TFT_RST_Pin;
+  lcd.bl_port = TFT_BL_GPIO_Port;
+  lcd.bl_pin = TFT_BL_Pin;
 
   ILI9488_Init(&lcd, ILI9488_ROTATION_0);
   ILI9488_FillScreen(&lcd, ILI9488_COLOR_BLACK);
-  
-  ILI9488_FillRect(5, 45,  310, 2, ILI9488_COLOR_DGRAY);
-  ILI9488_FillRect(5, 135, 310, 2, ILI9488_COLOR_DGRAY);
-  ILI9488_FillRect(5, 295, 310, 2, ILI9488_COLOR_DGRAY);
-  ILI9488_FillRect(5, 420, 310, 2, ILI9488_COLOR_DGRAY);
 
-  ILI9488_Print(20, 15, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(15, 60, "CURRENT:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(15, 100, "BUS VOLT:", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(15, 150, "BATTERY_1:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(15, 185, "BATTERY_2:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(15, 220, "BATTERY_3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(15, 255, "BATTERY_4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(15, 315, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+  ILI9488_FillRect(&lcd, 5, 45, 310, 2, ILI9488_COLOR_DGRAY);
+  ILI9488_FillRect(&lcd, 5, 135, 310, 2, ILI9488_COLOR_DGRAY);
+  ILI9488_FillRect(&lcd, 5, 295, 310, 2, ILI9488_COLOR_DGRAY);
+  ILI9488_FillRect(&lcd, 5, 420, 310, 2, ILI9488_COLOR_DGRAY);
+
+  ILI9488_Print(&lcd, 20, 15, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 60, "CURRENT:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 100, "BUS VOLT:", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 150, "BATTERY_1:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 185, "BATTERY_2:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 220, "BATTERY_3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 255, "BATTERY_4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 315, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 }
+
+FRESULT csv_create_with_header(char *out_filename, size_t out_size)
+{
+  FIL fil;
+
+  for (int i = 0; i < 1000; i++)
+  {
+    snprintf(out_filename, out_size, "LOG%03d.CSV", i);
+
+    if (f_open(&fil, out_filename, FA_READ) != FR_OK)
+    {
+      // slot free — try to create it
+      if (f_open(&fil, out_filename, FA_CREATE_NEW | FA_WRITE) == FR_OK)
+      {
+        const char *header = "TIMESTAMP,BUS_VOLT_V,CURRENT_A,CELL_ID,CELL_VOLT_V\r\n";
+        UINT bw;
+        FRESULT wres = f_write(&fil, header, strlen(header), &bw);
+        f_close(&fil);
+
+        if (wres != FR_OK || bw != strlen(header))
+        {
+          return FR_DISK_ERR; // header write failed
+        }
+        return FR_OK; // success — out_filename now holds the created name
+      }
+      // creation failed for this slot — don't break, don't retry same name
+      return FR_DISK_ERR;
+    }
+    else
+    {
+      f_close(&fil); // slot taken, try next
+    }
+  }
+
+  return FR_EXIST; // all 1000 slots exhausted
+}
+
+FRESULT csv_flush_buffer(const char *filename, const char *buf, size_t len)
+{
+  FIL file;
+  UINT bw;
+  FRESULT res;
+
+  if (len == 0)
+    return FR_OK; // nothing to write
+
+  res = f_open(&file, filename, FA_OPEN_ALWAYS | FA_WRITE);
+  if (res != FR_OK)
+    return res;
+
+  res = f_lseek(&file, f_size(&file));
+  if (res != FR_OK)
+  {
+    f_close(&file);
+    return res;
+  }
+
+  res = f_write(&file, buf, (UINT)len, &bw);
+  f_close(&file);
+
+  return (res == FR_OK && bw == (UINT)len) ? FR_OK : FR_DISK_ERR;
+}
+
+/**
+ * Appends one CSV row directly into log_buffer at the given offset.
+ * Returns the new offset (buffer length) on success, or the old offset
+ * unchanged if the row wouldn't fit (caller should flush first, then retry).
+ */
+size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogRecord_t *records)
+{
+  int len = snprintf(buf + current_offset, buf_size - current_offset,
+                     "%lu,%.5f,%.5f,%.5f,%u\r\n",
+                     (unsigned long)records->timestamp,
+                     records->bus_voltage_V,
+                     records->current_A,
+                     records->cell_voltage_V,
+                     records->cell_id);
+
+  if (len < 0 || (size_t)len >= (buf_size - current_offset))
+  {
+    // Wouldn't fit — don't corrupt/truncate, just report "no change"
+    return current_offset;
+  }
+
+  return current_offset + (size_t)len;
+}
+
+void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
+{
+  sample_count++;
+  size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
+
+  if ((new_len == active_len) || (sample_count > 215))
+  {
+    osMutexAcquire(myMutex01Handle, osWaitForever);
+    if (flush_buf == NULL)
+    {
+      flush_buf = active_buf;
+      flush_len = active_len;
+      active_buf = (active_buf == log_buffer_A) ? log_buffer_B : log_buffer_A;
+      active_len = 0;
+      sample_count = 0;
+      // retry the sample into the now-empty active buffer
+      active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
+    }
+    osMutexRelease(myMutex01Handle);
+  }
+  else
+  {
+    active_len = new_len;
+  }
+}
+
+void logging_task(void) // Run in low priority thread
+{
+  char *local_flush_buf = NULL;
+  size_t local_flush_len = 0;
+
+  osMutexAcquire(myMutex01Handle, osWaitForever);
+  if (flush_buf != NULL && flush_len > 0)
+  {
+    local_flush_buf = flush_buf;
+    local_flush_len = flush_len;
+  }
+  osMutexRelease(myMutex01Handle);
+
+  if (local_flush_buf != NULL && local_flush_len > 0)
+  {
+    csv_flush_buffer(current_filename, local_flush_buf, local_flush_len);
+
+    osMutexAcquire(myMutex01Handle, osWaitForever);
+    flush_buf = NULL;   // only clear after the write actually completes
+    osMutexRelease(myMutex01Handle);
+  }
+}  
 
 void Set_SPI_Speed(uint32_t prescaler)
 {
@@ -650,6 +952,42 @@ void Set_SPI_Speed(uint32_t prescaler)
   __HAL_SPI_ENABLE(&hspi1);
 }
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_Low_priority */
+/**
+  * @brief  Function implementing the LowPriority thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_Low_priority */
+void Low_priority(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_Data_Acquisition */
+/**
+* @brief Function implementing the DataAcquisition thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Data_Acquisition */
+void Data_Acquisition(void *argument)
+{
+  /* USER CODE BEGIN Data_Acquisition */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END Data_Acquisition */
+}
 
 /**
   * @brief  Period elapsed callback in non blocking mode

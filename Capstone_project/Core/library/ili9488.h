@@ -181,6 +181,11 @@ void ILI9488_DrawBitmap1Bit(ILI9488_HandleTypeDef *dev,
                              const uint8_t *bitmap,
                              uint16_t fg565, uint16_t bg565);
 
+
+void ILI9488_Print(ILI9488_HandleTypeDef *dev,
+                    uint16_t x, uint16_t y, const char *str,
+                    uint16_t color565, uint16_t bg565, uint8_t size);
+
 #ifdef __cplusplus
 }
 #endif
