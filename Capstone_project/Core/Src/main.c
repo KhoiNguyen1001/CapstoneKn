@@ -93,7 +93,7 @@ typedef struct
   uint8_t cell_id;      // 1-4
 } LogRecord_t;
 
-LogRecord_t LogRecord_data[4];
+LogRecord_t LogRecord_data;
 float shunt_v;
 
 #define LOG_RECORD_COUNT 250
@@ -250,34 +250,8 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
-  on_new_sample(&LogRecord_data[0]);
-  logging_task();
   while (1)
   {
-    if (ADS1115_IsDataReady())
-    {
-      HAL_Delay(1);
-      ADS1115_ReadResult(&ads1115a, &LogRecord_data[0].cell_voltage_V);
-
-      sprintf(buffer, "%.5f V    ", LogRecord_data[0].cell_voltage_V);
-      ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_BLACK, ILI9488_COLOR_BLACK, 2);
-    }
-
-    if (INA226_data_ready)
-    {
-      INA226_data_ready = false;
-      INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
-      INA226_ReadShuntVoltage(&ina226, &shunt_v);
-      INA226_ReadCurrent(&ina226, &LogRecord_data[0].current_A);
-      INA226_ReadBusVoltage(&ina226, &LogRecord_data[0].bus_voltage_V);
-
-      sprintf(buffer, "%.5f A   ", LogRecord_data[0].current_A);
-      ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-      sprintf(buffer, "%.5f V   ", LogRecord_data[0].bus_voltage_V);
-      ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-    }
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -963,9 +937,22 @@ void Set_SPI_Speed(uint32_t prescaler)
 void Low_priority(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
+  static uint8_t LCD_refresh_count = 0;
+  while(true)
   {
+    logging_task();
+    
+    LCD_refresh_count++;
+    if (LCD_refresh_count > 200)
+    {
+      LCD_refresh_count = 0;
+      sprintf(buffer, "%.5f V    ", LogRecord_data.cell_voltage_V);
+      ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_BLACK, ILI9488_COLOR_BLACK, 2);
+      sprintf(buffer, "%.5f A   ", LogRecord_data.current_A);
+      ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      sprintf(buffer, "%.5f V   ", LogRecord_data.bus_voltage_V);
+      ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+    }
     osDelay(1);
   }
   /* USER CODE END 5 */
@@ -981,9 +968,54 @@ void Low_priority(void *argument)
 void Data_Acquisition(void *argument)
 {
   /* USER CODE BEGIN Data_Acquisition */
-  /* Infinite loop */
-  for(;;)
+  static uint8_t cell_id = 4, cell_id_prev = 4;
+  ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
+  while(true)
   {
+    if (ADS1115_IsDataReady())
+    {
+      cell_id--;
+      osDelay(1);
+      ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
+
+      switch (cell_id)
+      {
+      case 1:
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
+        break;
+      case 2:
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
+        break;
+      case 3:
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
+        break;
+      default:
+        cell_id = 4; //if cell_id = 0 -> cell_id = 4
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
+        break;
+      }
+    }
+
+    if (INA226_data_ready)
+    {
+      osDelay(1);
+      INA226_data_ready = false;
+      INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
+      INA226_ReadShuntVoltage(&ina226, &shunt_v);
+      INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
+      INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
+      
+      // Logging data (voltage and current)
+      on_new_sample(&LogRecord_data);
+      cell_id = cell_id_prev;
+    }
+
+    // Logging data (voltage)
+    if(cell_id != cell_id_prev)
+    {
+      on_new_sample(&LogRecord_data);
+      cell_id = cell_id_prev;
+    }
     osDelay(1);
   }
   /* USER CODE END Data_Acquisition */
