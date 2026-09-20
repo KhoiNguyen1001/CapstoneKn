@@ -29,7 +29,9 @@
 #include "../library/INA226.h"
 #include "../library/ili9488.h"
 #include "../library/sd_functions.h"
-#include "../library/sd_benchmark.h"
+#include "../library/data_processing.h"
+#include "../library/DS3231.h"
+#include "../rs485_library/epever_mppt.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -79,23 +81,16 @@ const osMutexAttr_t myMutex01_attributes = {
   .name = "myMutex01"
 };
 /* USER CODE BEGIN PV */
+float shunt_v;
 ILI9488_HandleTypeDef lcd;
 ads1115_t ads1115a;
 INA226_HandleTypeDef ina226;
 uint16_t ina226_alert_status;
-
-typedef struct
-{
-  uint32_t timestamp;
-  float bus_voltage_V;  // 0-20V
-  float current_A;      // 0-30A
-  float cell_voltage_V; // ~4.xxxxx
-  uint8_t cell_id;      // 1-4
-} LogRecord_t;
-
+DS3231_HandleTypeDef DS3231_Handler;
+DS3231_TimeDate td;
 LogRecord_t LogRecord_data;
-float shunt_v;
 
+#define DS3231_ADDRESS 0x68 << 1
 #define LOG_RECORD_COUNT 250
 #define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
 
@@ -130,16 +125,17 @@ void Set_SPI_Speed(uint32_t prescaler);
 void load_control(uint8_t relay, GPIO_PinState state);
 void LCD_TFT_init(void);
 
-FRESULT csv_create_with_header(char *out_filename, size_t out_size);
-FRESULT csv_flush_buffer(const char *filename, const char *buf, size_t len);
-size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogRecord_t *records);
 void on_new_sample(LogRecord_t *records);
 void logging_task(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+int _write(int file, char *ptr, int len)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    return len;
+}
 /* USER CODE END 0 */
 
 /**
@@ -190,11 +186,6 @@ int main(void)
   Set_SPI_Speed(SPI_BAUDRATEPRESCALER_2);
   LCD_TFT_init();
 
-  ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
-  INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
-  INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
-  INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
-
   Set_SPI_Speed(SPI_BAUDRATEPRESCALER_64);
   sd_mount();
   if (csv_create_with_header(current_filename, sizeof(current_filename)) == FR_OK)
@@ -204,6 +195,11 @@ int main(void)
   else
     ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
 
+  ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
+  INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
+  INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
+  INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
+  DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -725,6 +721,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   }
 }
 
+void Set_SPI_Speed(uint32_t prescaler)
+{
+  __HAL_SPI_DISABLE(&hspi1);
+  hspi1.Init.BaudRatePrescaler = prescaler;
+  HAL_SPI_Init(&hspi1);
+  __HAL_SPI_ENABLE(&hspi1);
+}
+
 void load_control(uint8_t relay, GPIO_PinState state)
 {
   switch (relay)
@@ -783,95 +787,11 @@ void LCD_TFT_init(void)
   ILI9488_Print(&lcd, 15, 315, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 }
 
-FRESULT csv_create_with_header(char *out_filename, size_t out_size)
-{
-  FIL fil;
-
-  for (int i = 0; i < 1000; i++)
-  {
-    snprintf(out_filename, out_size, "LOG%03d.CSV", i);
-
-    if (f_open(&fil, out_filename, FA_READ) != FR_OK)
-    {
-      // slot free — try to create it
-      if (f_open(&fil, out_filename, FA_CREATE_NEW | FA_WRITE) == FR_OK)
-      {
-        const char *header = "TIMESTAMP,BUS_VOLT_V,CURRENT_A,CELL_ID,CELL_VOLT_V\r\n";
-        UINT bw;
-        FRESULT wres = f_write(&fil, header, strlen(header), &bw);
-        f_close(&fil);
-
-        if (wres != FR_OK || bw != strlen(header))
-        {
-          return FR_DISK_ERR; // header write failed
-        }
-        return FR_OK; // success — out_filename now holds the created name
-      }
-      // creation failed for this slot — don't break, don't retry same name
-      return FR_DISK_ERR;
-    }
-    else
-    {
-      f_close(&fil); // slot taken, try next
-    }
-  }
-
-  return FR_EXIST; // all 1000 slots exhausted
-}
-
-FRESULT csv_flush_buffer(const char *filename, const char *buf, size_t len)
-{
-  FIL file;
-  UINT bw;
-  FRESULT res;
-
-  if (len == 0)
-    return FR_OK; // nothing to write
-
-  res = f_open(&file, filename, FA_OPEN_ALWAYS | FA_WRITE);
-  if (res != FR_OK)
-    return res;
-
-  res = f_lseek(&file, f_size(&file));
-  if (res != FR_OK)
-  {
-    f_close(&file);
-    return res;
-  }
-
-  res = f_write(&file, buf, (UINT)len, &bw);
-  f_close(&file);
-
-  return (res == FR_OK && bw == (UINT)len) ? FR_OK : FR_DISK_ERR;
-}
-
-/**
- * Appends one CSV row directly into log_buffer at the given offset.
- * Returns the new offset (buffer length) on success, or the old offset
- * unchanged if the row wouldn't fit (caller should flush first, then retry).
- */
-size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogRecord_t *records)
-{
-  int len = snprintf(buf + current_offset, buf_size - current_offset,
-                     "%lu,%.5f,%.5f,%.5f,%u\r\n",
-                     (unsigned long)records->timestamp,
-                     records->bus_voltage_V,
-                     records->current_A,
-                     records->cell_voltage_V,
-                     records->cell_id);
-
-  if (len < 0 || (size_t)len >= (buf_size - current_offset))
-  {
-    // Wouldn't fit — don't corrupt/truncate, just report "no change"
-    return current_offset;
-  }
-
-  return current_offset + (size_t)len;
-}
-
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
+
+  records->crc_16 = CalculateCRC16((const uint8_t *)records,offsetof(LogRecord_t, crc_16));
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
   if ((new_len == active_len) || (sample_count > 215))
@@ -917,14 +837,6 @@ void logging_task(void) // Run in low priority thread
     osMutexRelease(myMutex01Handle);
   }
 }  
-
-void Set_SPI_Speed(uint32_t prescaler)
-{
-  __HAL_SPI_DISABLE(&hspi1);
-  hspi1.Init.BaudRatePrescaler = prescaler;
-  HAL_SPI_Init(&hspi1);
-  __HAL_SPI_ENABLE(&hspi1);
-}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_Low_priority */
@@ -969,6 +881,8 @@ void Data_Acquisition(void *argument)
 {
   /* USER CODE BEGIN Data_Acquisition */
   static uint8_t cell_id = 4, cell_id_prev = 4;
+  static uint32_t os_time_pre = 0;
+  uint32_t os_time, os_time_elapsed;
   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
   while(true)
   {
@@ -996,6 +910,8 @@ void Data_Acquisition(void *argument)
       }
     }
 
+    os_time = osKernelGetTickCount();
+    os_time_elapsed = os_time - os_time_pre;
     if (INA226_data_ready)
     {
       osDelay(1);
@@ -1006,6 +922,8 @@ void Data_Acquisition(void *argument)
       INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
       
       // Logging data (voltage and current)
+      LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
+      LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
       on_new_sample(&LogRecord_data);
       cell_id = cell_id_prev;
     }
@@ -1013,9 +931,18 @@ void Data_Acquisition(void *argument)
     // Logging data (voltage)
     if(cell_id != cell_id_prev)
     {
+      LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
+      LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
       on_new_sample(&LogRecord_data);
       cell_id = cell_id_prev;
     }
+
+    if(os_time_elapsed >= 3600000)
+    {
+      os_time_pre = os_time;
+      DS3231_GetTimeDate(&DS3231_Handler, &td);
+    }
+    
     osDelay(1);
   }
   /* USER CODE END Data_Acquisition */

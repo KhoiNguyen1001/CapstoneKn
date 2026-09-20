@@ -36,7 +36,16 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+typedef struct
+{
+  uint32_t timestamp;
+  uint16_t timestamp_ms;
+  float bus_voltage_V;  // 0-20V
+  float current_A;      // 0-30A
+  float cell_voltage_V; // ~4.xxxxx
+  uint8_t cell_id;      // 1-4
+  uint16_t crc_16;
+} LogRecord_t;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
