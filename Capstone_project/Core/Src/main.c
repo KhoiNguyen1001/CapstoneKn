@@ -794,7 +794,7 @@ void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
   records->crc_16 = CalculateCRC16((const uint8_t *)records,offsetof(LogRecord_t, crc_16));
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
-  if ((new_len == active_len) || (sample_count > 215))
+  if ((new_len == active_len) || (sample_count > 220))
   {
     osMutexAcquire(myMutex01Handle, osWaitForever);
     if (flush_buf == NULL)
