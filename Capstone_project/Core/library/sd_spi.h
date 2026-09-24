@@ -1,18 +1,3 @@
-/******************************************************************************
- *  File        : sd_spi.h (SDSC/SDHC support)
- *  Author      : ControllersTech
- *  Website     : https://controllerstech.com
- *  Date        : June 26, 2025
- *
- *  Description :
- *    This file is part of a custom STM32/Embedded tutorial series.
- *    For documentation, updates, and more examples, visit the website above.
- *
- *  Note :
- *    This code is written and maintained by ControllersTech.
- *    You are free to use and modify it for learning and development.
- ******************************************************************************/
-
 #ifndef __SD_SPI_H__
 #define __SD_SPI_H__
 
@@ -21,6 +6,7 @@
 
 #define CMD0  (0)
 #define CMD8  (8)
+#define CMD9  (9)
 #define CMD17 (17)
 #define CMD24 (24)
 #define CMD55 (55)
@@ -40,5 +26,9 @@ SD_Status SD_WriteBlocks(const uint8_t *buff, uint32_t sector, uint32_t count);
 SD_Status SD_ReadMultiBlocks(uint8_t *buff, uint32_t sector, uint32_t count);
 SD_Status SD_WriteMultiBlocks(const uint8_t *buff, uint32_t sector, uint32_t count);
 uint8_t sd_is_sdhc(void);
+
+uint8_t SD_ReceiveByte(void);
+void SD_TransmitByte(uint8_t data);
+uint8_t SD_SendCommand(uint8_t cmd, uint32_t arg, uint8_t crc);
 
 #endif // __SD_SPI_H__

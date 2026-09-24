@@ -49,7 +49,7 @@ int sd_get_space_kb(void) {
 	fre_sect = fre_clust * pfs->csize;
 	total_kb = tot_sect / 2;
 	free_kb = fre_sect / 2;
-	printf("💾 Total: %lu KB, Free: %lu KB\r\n", total_kb, free_kb);
+	printf("Total: %lu KB, Free: %lu KB\r\n", total_kb, free_kb);
 	return FR_OK;
 }
 
@@ -67,9 +67,6 @@ int sd_mount(void) {
 	DSTATUS stat = disk_initialize(0);
 	if (stat != 0) {
 		printf("disk_initialize failed: 0x%02X\n", stat);
-		printf("FR_NOT_READY\tTry Hard Reset or Check Connection/Power\r\n");
-		printf("Make sure \"MX_FATFS_Init\" is not being called in the main function\n"\
-				"You need to disable its call in CubeMX->Project Manager->Advance Settings->Uncheck Generate code for MX_FATFS_Init\r\n");
 		return FR_NOT_READY;
 	}
 
@@ -198,7 +195,7 @@ int sd_read_csv(const char *filename, CsvRecord *records, int max_records, int *
 		return res;
 	}
 
-	printf("📄 Reading CSV: %s\r\n", filename);
+	printf("Reading CSV: %s\r\n", filename);
 	while (f_gets(line, sizeof(line), &file) && *record_count < max_records) {
 		char *token = strtok(line, ",");
 		if (!token) continue;
@@ -265,20 +262,20 @@ void sd_list_directory_recursive(const char *path, int depth) {
 
 		if (fno.fattrib & AM_DIR) {
 			if (strcmp(name, ".") && strcmp(name, "..")) {
-				printf("%*s📁 %s\r\n", depth * 2, "", name);
+				printf("%*s %s\r\n", depth * 2, "", name);
 				char newpath[128];
 				snprintf(newpath, sizeof(newpath), "%s/%s", path, name);
 				sd_list_directory_recursive(newpath, depth + 1);
 			}
 		} else {
-			printf("%*s📄 %s (%lu bytes)\r\n", depth * 2, "", name, (unsigned long)fno.fsize);
+			printf("%*s %s (%lu bytes)\r\n", depth * 2, "", name, (unsigned long)fno.fsize);
 		}
 	}
 	f_closedir(&dir);
 }
 
 void sd_list_files(void) {
-	printf("📂 Files on SD Card:\r\n");
+	printf(" Files on SD Card:\r\n");
 	sd_list_directory_recursive(sd_path, 0);
 	printf("\r\n\r\n");
 }

@@ -26,7 +26,7 @@ extern const Diskio_drvTypeDef SD_Driver;
 DSTATUS SD_disk_status(BYTE drv);
 DSTATUS SD_disk_initialize(BYTE drv);
 DRESULT SD_disk_read(BYTE pdrv, BYTE *buff, DWORD sector, UINT count);
-DRESULT SD_disk_write(BYTE pdrv,  BYTE *buff, DWORD sector, UINT count);
+DRESULT SD_disk_write(BYTE pdrv, const BYTE *buff, DWORD sector, UINT count);
 DRESULT SD_disk_ioctl(BYTE pdrv, BYTE cmd, void *buff);
 
 #ifdef __cplusplus

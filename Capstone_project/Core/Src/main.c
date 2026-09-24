@@ -170,7 +170,7 @@ int main(void)
   MX_DMA_Init();
   MX_SPI1_Init();
   MX_USART2_UART_Init();
-  MX_FATFS_Init();
+  //MX_FATFS_Init();
   MX_I2C1_Init();
   MX_I2C2_Init();
   MX_I2C3_Init();
@@ -180,14 +180,15 @@ int main(void)
   load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
   HAL_GPIO_WritePin(TFT_CS_GPIO_Port, TFT_CS_Pin, GPIO_PIN_SET); /* Deselect TFT */
   HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);   /* Deselect SD Card */
-  HAL_GPIO_WritePin(TFT_BL_GPIO_Port, TFT_BL_Pin, GPIO_PIN_SET); /* Backlight ON */
   HAL_Delay(200);
 
-  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_2);
-  LCD_TFT_init();
-
-  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_64);
+  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_256);
+  HAL_Delay(100);
   sd_mount();
+
+  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_2);
+  HAL_Delay(100);
+  LCD_TFT_init();
   if (csv_create_with_header(current_filename, sizeof(current_filename)) == FR_OK)
   {
     ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
@@ -682,7 +683,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : SD_CS_Pin */
   GPIO_InitStruct.Pin = SD_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(SD_CS_GPIO_Port, &GPIO_InitStruct);
 
