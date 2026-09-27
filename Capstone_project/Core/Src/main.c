@@ -791,8 +791,11 @@ void LCD_TFT_init(void)
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
-
   records->crc_16 = CalculateCRC16((const uint8_t *)records,offsetof(LogRecord_t, crc_16));
+  printf("%lu.%03u,%.5f,%.5f,%u,%.5f\r\n",
+		  records->timestamp, records->timestamp_ms,
+		  records->bus_voltage_V, records->current_A,
+		  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
   if ((new_len == active_len) || (sample_count > 220))
@@ -859,11 +862,8 @@ void Low_priority(void *argument)
     if (LCD_refresh_count > 200)
     {
       LCD_refresh_count = 0;
-      sprintf(buffer, "%.5f V    ", LogRecord_data.cell_voltage_V);
       ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_BLACK, ILI9488_COLOR_BLACK, 2);
-      sprintf(buffer, "%.5f A   ", LogRecord_data.current_A);
       ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-      sprintf(buffer, "%.5f V   ", LogRecord_data.bus_voltage_V);
       ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
     }
     osDelay(1);
@@ -943,7 +943,6 @@ void Data_Acquisition(void *argument)
       os_time_pre = os_time;
       DS3231_GetTimeDate(&DS3231_Handler, &td);
     }
-    
     osDelay(1);
   }
   /* USER CODE END Data_Acquisition */
