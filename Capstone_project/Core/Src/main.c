@@ -72,7 +72,7 @@ const osThreadAttr_t LowPriority_attributes = {
 osThreadId_t DataAcquisitionHandle;
 const osThreadAttr_t DataAcquisition_attributes = {
   .name = "DataAcquisition",
-  .stack_size = 512 * 4,
+  .stack_size = 512 * 8,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for myMutex01 */
@@ -153,7 +153,6 @@ int main(void)
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
@@ -182,20 +181,7 @@ int main(void)
   HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);   /* Deselect SD Card */
   HAL_Delay(200);
 
-  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_256);
-  HAL_Delay(100);
-  sd_mount();
-
-  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_2);
-  HAL_Delay(100);
   LCD_TFT_init();
-  if (csv_create_with_header(current_filename, sizeof(current_filename)) == FR_OK)
-  {
-    ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  }
-  else
-    ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
-
   ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
   INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
   INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
@@ -472,7 +458,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -854,6 +840,16 @@ void Low_priority(void *argument)
 {
   /* USER CODE BEGIN 5 */
   static uint8_t LCD_refresh_count = 0;
+  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_128);
+  HAL_Delay(500);
+  sd_mount();
+  Set_SPI_Speed(SPI_BAUDRATEPRESCALER_16);
+  if (csv_create_with_header(current_filename, sizeof(current_filename)) == FR_OK)
+  {
+    ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  }
+  else
+    ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
   while(true)
   {
     logging_task();

@@ -118,10 +118,9 @@ void ILI9488_HardwareReset(ILI9488_HandleTypeDef *dev)
     if (!dev->rst_port) {
         return;
     }
-    HAL_GPIO_WritePin(dev->rst_port, dev->rst_pin, GPIO_PIN_SET);
-    HAL_Delay(5);
+
     HAL_GPIO_WritePin(dev->rst_port, dev->rst_pin, GPIO_PIN_RESET);
-    HAL_Delay(20);
+    HAL_Delay(50);
     HAL_GPIO_WritePin(dev->rst_port, dev->rst_pin, GPIO_PIN_SET);
     HAL_Delay(150);
 }
@@ -172,7 +171,7 @@ void ILI9488_Init(ILI9488_HandleTypeDef *dev, ILI9488_Rotation_t rotation)
 {
     /* Ensure CS idle-high before anything else. */
     CS_Deselect(dev);
-
+    HAL_Delay(10);
     ILI9488_HardwareReset(dev);
     ILI9488_SoftwareReset(dev);
 

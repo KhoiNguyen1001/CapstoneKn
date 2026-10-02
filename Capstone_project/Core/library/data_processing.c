@@ -17,37 +17,33 @@
 FRESULT csv_create_with_header(char *out_filename, size_t out_size)
 {
   FIL fil;
+  FRESULT res;
+  static const char header[] = "TIMESTAMP,BUS_VOLT_V,CURRENT_A,CELL_ID,CELL_VOLT_V\r\n";
 
   for (int i = 0; i < 1000; i++)
   {
     snprintf(out_filename, out_size, "LOG%03d.CSV", i);
 
-    if (f_open(&fil, out_filename, FA_READ) != FR_OK)
-    {
-      // slot free — try to create it
-      if (f_open(&fil, out_filename, FA_CREATE_NEW | FA_WRITE) == FR_OK)
-      {
-        const char *header = "TIMESTAMP,BUS_VOLT_V,CURRENT_A,CELL_ID,CELL_VOLT_V\r\n";
-        UINT bw;
-        FRESULT wres = f_write(&fil, header, strlen(header), &bw);
-        f_close(&fil);
+    res = f_open(&fil, out_filename, FA_CREATE_NEW | FA_WRITE);
+    if (res == FR_EXIST) continue;              // slot taken, try next
+    if (res != FR_OK) {
+	printf("heap free=%u min_ever=%u\r\n",
+		   (unsigned)xPortGetFreeHeapSize(),
+		   (unsigned)xPortGetMinimumEverFreeHeapSize());
+      printf("csv: f_open(%s) failed, FRESULT=%d\r\n", out_filename, res);
+      return res;                               // return the REAL error
+    }
 
-        if (wres != FR_OK || bw != strlen(header))
-        {
-          return FR_DISK_ERR; // header write failed
-        }
-        return FR_OK; // success — out_filename now holds the created name
-      }
-      // creation failed for this slot — don't break, don't retry same name
-      return FR_DISK_ERR;
+    UINT bw = 0;
+    res = f_write(&fil, header, sizeof(header) - 1, &bw);
+    FRESULT cres = f_close(&fil);               // data is actually flushed here
+    if (res != FR_OK || cres != FR_OK || bw != sizeof(header) - 1) {
+      printf("csv: header write=%d close=%d bw=%u\r\n", res, cres, bw);
+      return (res != FR_OK) ? res : (cres != FR_OK ? cres : FR_DISK_ERR);
     }
-    else
-    {
-      f_close(&fil); // slot taken, try next
-    }
+    return FR_OK;
   }
-
-  return FR_EXIST; // all 1000 slots exhausted
+  return FR_EXIST;                              // all 1000 names used
 }
 
 FRESULT csv_flush_buffer(const char *filename, const char *buf, size_t len)

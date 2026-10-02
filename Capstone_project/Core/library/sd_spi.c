@@ -102,14 +102,21 @@ SD_Status SD_SPI_Init(void) {
     uint8_t r7[4];
     uint32_t retry;
 
-    HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-    for (i = 0; i < 10; i++) SD_TransmitByte(0xFF);
+    uint8_t dummy = 0xFF;
+    uint8_t cmd0[6] = {0x40, 0, 0, 0, 0, 0x95};
 
     HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
-    response = SD_SendCommand(CMD0, 0, 0x95);
+    for (int i = 0; i < 20; i++) {
+        HAL_SPI_Transmit(&hspi1, &dummy, 1, 50);
+    }
+
+    HAL_SPI_Transmit(&hspi1, cmd0, 6, 50);
+    for (int i = 0; i < 200; i++) {
+        HAL_SPI_TransmitReceive(&hspi1, &dummy, &response, 1, 50);
+        if (response != 0xFF) break;
+    }
     HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
-    SD_TransmitByte(0xFF);
-    if (response != 0x01) return SD_ERROR;
+    HAL_Delay(20);
 
     HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
     response = SD_SendCommand(CMD8, 0x000001AA, 0x87);
@@ -147,6 +154,7 @@ SD_Status SD_SPI_Init(void) {
         if (response != 0x00) return SD_ERROR;
     }
 
+    HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);
     card_initialized = 1;
     return SD_OK;
 }
