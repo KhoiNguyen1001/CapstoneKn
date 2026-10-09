@@ -1,0 +1,8 @@
+../Core/rs485_library/modbus_rtu.c:11:10:Modbus_CRC16	4
+../Core/rs485_library/modbus_rtu.c:43:24:modbus_transceive	14
+../Core/rs485_library/modbus_rtu.c:107:24:modbus_read_registers	6
+../Core/rs485_library/modbus_rtu.c:145:17:Modbus_ReadHoldingRegisters	1
+../Core/rs485_library/modbus_rtu.c:152:17:Modbus_ReadInputRegisters	1
+../Core/rs485_library/modbus_rtu.c:159:17:Modbus_ReadDiscreteInputs	7
+../Core/rs485_library/modbus_rtu.c:198:17:Modbus_WriteSingleRegister	3
+../Core/rs485_library/modbus_rtu.c:226:17:Modbus_WriteMultipleRegisters	6

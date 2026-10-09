@@ -18,7 +18,7 @@ FRESULT csv_create_with_header(char *out_filename, size_t out_size)
 {
   FIL fil;
   FRESULT res;
-  static const char header[] = "TIMESTAMP,BUS_VOLT_V,CURRENT_A,CELL_ID,CELL_VOLT_V\r\n";
+  static const char header[] = "TIMESTAMP,BUS_VOLT_V,CURRENT_A,CELL_VOLT_V,CELL_ID,CRC16\r\n";
 
   for (int i = 0; i < 1000; i++)
   {
@@ -79,15 +79,17 @@ FRESULT csv_flush_buffer(const char *filename, const char *buf, size_t len)
  */
 size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogRecord_t *records)
 {
-  int len = snprintf(buf + current_offset, buf_size - current_offset,
-                     "%lu.%03u,%.5f,%.5f,%.5f,%u,%04X\r\n",
+  char *start = buf + current_offset;
+  size_t avail = buf_size - current_offset;
+
+  int len = snprintf(start, avail,
+                     "%lu.%03u,%.5f,%.5f,%.5f,%u",
                      (unsigned long)records->timestamp,
                      (unsigned char)records->timestamp_ms,
                      records->bus_voltage_V,
                      records->current_A,
                      records->cell_voltage_V,
-                     records->cell_id,
-                     records->crc_16);
+                     records->cell_id);
 
   if (len < 0 || (size_t)len >= (buf_size - current_offset))
   {
@@ -95,7 +97,19 @@ size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogR
     return current_offset;
   }
 
-  return current_offset + (size_t)len;
+  uint16_t crc = CalculateCRC16((const uint8_t *)start, len);
+
+  int len2 = snprintf(start + len, avail - len, ",%04X\r\n", crc);
+  if (len2 < 0 || (size_t)len2 >= avail - len)
+  {
+    // Wouldn't fit — don't corrupt/truncate, just report "no change"
+    return current_offset;
+  }
+
+  // for (int i = 0; i < len + len2; i++) printf("%02X ", (uint8_t)start[i]);
+  // printf("\n");
+
+  return current_offset + (size_t)(len + len2);
 }
 
 uint16_t CalculateCRC16(const uint8_t *data, size_t length)

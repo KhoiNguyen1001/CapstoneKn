@@ -1,0 +1,6 @@
+../Core/library/sd_diskio_spi.c:22:9:SD_disk_status	2
+../Core/library/sd_diskio_spi.c:28:9:SD_disk_initialize	2
+../Core/library/sd_diskio_spi.c:35:9:SD_disk_read	4
+../Core/library/sd_diskio_spi.c:42:9:SD_disk_write	4
+../Core/library/sd_diskio_spi.c:48:10:SD_GetSectorCount	7
+../Core/library/sd_diskio_spi.c:105:9:SD_disk_ioctl	6

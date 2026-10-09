@@ -1,0 +1,13 @@
+../Core/rs485_library/rs485.c:10:20:rs485_driver_enable	1
+../Core/rs485_library/rs485.c:15:20:rs485_driver_disable	1
+../Core/rs485_library/rs485.c:21:20:rs485_receiver_enable	1
+../Core/rs485_library/rs485.c:26:20:rs485_receiver_disable	1
+../Core/rs485_library/rs485.c:34:19:RS485_Init	6
+../Core/rs485_library/rs485.c:66:6:RS485_SetTransmitMode	2
+../Core/rs485_library/rs485.c:78:6:RS485_SetReceiveMode	2
+../Core/rs485_library/rs485.c:88:19:RS485_Transmit	1
+../Core/rs485_library/rs485.c:102:19:RS485_Receive	1
+../Core/rs485_library/rs485.c:108:19:RS485_Transmit_IT	2
+../Core/rs485_library/rs485.c:122:19:RS485_Receive_IT	1
+../Core/rs485_library/rs485.c:128:6:RS485_TxCpltCallback	1
+../Core/rs485_library/rs485.c:137:9:RS485_IsTxBusy	1

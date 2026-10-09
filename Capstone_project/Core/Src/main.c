@@ -65,14 +65,14 @@ UART_HandleTypeDef huart2;
 osThreadId_t LowPriorityHandle;
 const osThreadAttr_t LowPriority_attributes = {
   .name = "LowPriority",
-  .stack_size = 512 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for DataAcquisition */
 osThreadId_t DataAcquisitionHandle;
 const osThreadAttr_t DataAcquisition_attributes = {
   .name = "DataAcquisition",
-  .stack_size = 512 * 8,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for myMutex01 */
@@ -764,45 +764,46 @@ void LCD_TFT_init(void)
   ILI9488_FillRect(&lcd, 5, 295, 310, 2, ILI9488_COLOR_DGRAY);
   ILI9488_FillRect(&lcd, 5, 420, 310, 2, ILI9488_COLOR_DGRAY);
 
-  ILI9488_Print(&lcd, 20, 15, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  LCD_draw_tab_button(&lcd, 5, 90,  "ABOUT",   false);
+  LCD_draw_tab_button(&lcd, 100, 100, "MEASURE", true);
+  LCD_draw_tab_button(&lcd, 205, 100, "SETTING", false);
+
   ILI9488_Print(&lcd, 15, 60, "CURRENT:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 100, "BUS VOLT:", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 150, "BATTERY_1:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 185, "BATTERY_2:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 220, "BATTERY_3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 255, "BATTERY_4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(&lcd, 15, 315, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 }
 
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
-  records->crc_16 = CalculateCRC16((const uint8_t *)records,offsetof(LogRecord_t, crc_16));
   printf("%lu.%03u,%.5f,%.5f,%u,%.5f\r\n",
 		  records->timestamp, records->timestamp_ms,
 		  records->bus_voltage_V, records->current_A,
 		  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
-  if ((new_len == active_len) || (sample_count > 220))
-  {
-    osMutexAcquire(myMutex01Handle, osWaitForever);
-    if (flush_buf == NULL)
-    {
-      flush_buf = active_buf;
-      flush_len = active_len;
-      active_buf = (active_buf == log_buffer_A) ? log_buffer_B : log_buffer_A;
-      active_len = 0;
-      sample_count = 0;
-      // retry the sample into the now-empty active buffer
-      active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
-    }
-    osMutexRelease(myMutex01Handle);
-  }
-  else
-  {
-    active_len = new_len;
-  }
+  // if ((new_len == active_len) || (sample_count > 220))
+  // {
+  //   osMutexAcquire(myMutex01Handle, osWaitForever);
+  //   if (flush_buf == NULL)
+  //   {
+  //     flush_buf = active_buf;
+  //     flush_len = active_len;
+  //     active_buf = (active_buf == log_buffer_A) ? log_buffer_B : log_buffer_A;
+  //     active_len = 0;
+  //     sample_count = 0;
+  //     // retry the sample into the now-empty active buffer
+  //     active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
+  //   }
+  //   osMutexRelease(myMutex01Handle);
+  // }
+  // else
+  // {
+  //   active_len = new_len;
+  // }
 }
 
 void logging_task(void) // Run in low priority thread
@@ -844,12 +845,18 @@ void Low_priority(void *argument)
   HAL_Delay(500);
   sd_mount();
   Set_SPI_Speed(SPI_BAUDRATEPRESCALER_16);
+  
+  //ILI9488_Print(&lcd, 15, 60, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
   if (csv_create_with_header(current_filename, sizeof(current_filename)) == FR_OK)
   {
+    ILI9488_Print(&lcd, 15, 100 +215, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
     ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   }
   else
+  {
+    ILI9488_Print(&lcd, 15, 100 +215, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
     ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
+  }
   while(true)
   {
     logging_task();
@@ -858,9 +865,27 @@ void Low_priority(void *argument)
     if (LCD_refresh_count > 200)
     {
       LCD_refresh_count = 0;
-      ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_BLACK, ILI9488_COLOR_BLACK, 2);
+      sprintf(buffer, "%.5f A   ", LogRecord_data.current_A);
       ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      sprintf(buffer, "%.5f V   ", LogRecord_data.bus_voltage_V);
       ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+
+      sprintf(buffer, "%.5f V   ", LogRecord_data.cell_voltage_V);
+      switch (LogRecord_data.cell_id) {
+		case 1:
+		  ILI9488_Print(&lcd,160, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+		  break;
+		case 2:
+		  ILI9488_Print(&lcd,160, 185, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+		  break;
+		case 3:
+		  ILI9488_Print(&lcd,160, 220, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+		  break;
+		default:
+		  ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+		  break;
+      }
+
     }
     osDelay(1);
   }
@@ -877,19 +902,24 @@ void Low_priority(void *argument)
 void Data_Acquisition(void *argument)
 {
   /* USER CODE BEGIN Data_Acquisition */
-  static uint8_t cell_id = 4, cell_id_prev = 4;
+  static uint8_t cell_id_prev = 4; LogRecord_data.cell_id = 4;
   static uint32_t os_time_pre = 0;
   uint32_t os_time, os_time_elapsed;
+  
+  DS3231_GetTimeDate(&DS3231_Handler, &td);
+  os_time = osKernelGetTickCount();
+  os_time_pre = os_time;
+  
   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
   while(true)
   {
     if (ADS1115_IsDataReady())
     {
-      cell_id--;
+      LogRecord_data.cell_id--;
       osDelay(1);
       ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
 
-      switch (cell_id)
+      switch (LogRecord_data.cell_id)
       {
       case 1:
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
@@ -901,7 +931,7 @@ void Data_Acquisition(void *argument)
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
         break;
       default:
-        cell_id = 4; //if cell_id = 0 -> cell_id = 4
+    	  LogRecord_data.cell_id = 4; //if cell_id = 0 -> cell_id = 4
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
         break;
       }
@@ -922,19 +952,19 @@ void Data_Acquisition(void *argument)
       LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
       LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
       on_new_sample(&LogRecord_data);
-      cell_id = cell_id_prev;
+      cell_id_prev = LogRecord_data.cell_id;
     }
 
     // Logging data (voltage)
-    if(cell_id != cell_id_prev)
+    if(LogRecord_data.cell_id != cell_id_prev)
     {
       LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
       LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
       on_new_sample(&LogRecord_data);
-      cell_id = cell_id_prev;
+      cell_id_prev = LogRecord_data.cell_id;
     }
 
-    if(os_time_elapsed >= 3600000)
+    if(os_time_elapsed >= 900000)
     {
       os_time_pre = os_time;
       DS3231_GetTimeDate(&DS3231_Handler, &td);
