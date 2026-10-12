@@ -1,4 +1,5 @@
 #include "touch.h"
+#include "stdbool.h"
 
 #define I2C_TIMEOUT_MS   20
 
@@ -100,4 +101,40 @@ int Touch_Read(Touch_Handle_t *t, Touch_Point_t *pts, uint8_t max)
 {
     if (max > TOUCH_MAX_POINTS) max = TOUCH_MAX_POINTS;
     return gt911_read(t, pts, max);
+}
+
+
+int tab_hit(uint16_t px, uint16_t py)
+{
+    const uint16_t margin = 4;   /* easier to hit with a finger */
+    if (py + margin < TAB_Y || py >= TAB_Y + TAB_H + margin) return -1;
+    for (int i = 0; i < 3; i++) {
+        if (px >= tabs[i].x && px < tabs[i].x + tabs[i].w) return i;
+    }
+    return -1;
+}
+
+uint8_t touch_process(Touch_Handle_t * touch_lcd, uint8_t *active_tab)
+{
+    Touch_Point_t p[TOUCH_MAX_POINTS];
+    static bool pressed = false;
+    static uint8_t released_cnt = 0;
+    uint8_t changed = 0;
+
+    int n = Touch_Read(touch_lcd, p, TOUCH_MAX_POINTS);
+    if (n > 0) {
+    released_cnt = 0;
+    if (!pressed) {
+        pressed = true;
+        int i = tab_hit(p[0].x, p[0].y);
+        if (i >= 0 && i != *active_tab) {
+            *active_tab = i;
+            changed = 1;
+        }
+    }
+    } else if (n == 0) {
+        if (++released_cnt >= 3) pressed = false;
+    }
+
+    return changed;
 }

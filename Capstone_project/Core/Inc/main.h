@@ -45,6 +45,22 @@ typedef struct
   float cell_voltage_V; // ~4.xxxxx
   uint8_t cell_id;      // 1-4
 } LogRecord_t;
+
+typedef struct
+{
+  uint8_t ads1115_status; //Hal _status
+  uint8_t ina226_status; 
+  uint8_t sd_card_status; 
+  uint8_t lcd_page;
+  uint8_t ds3231_status;
+  uint8_t mppt_status;
+} module_status_t;
+
+enum lcd_page_t{
+  ABOUT_PAGE = 0,
+  MEASURE_PAGE = 1,
+  SETTING_PAGE = 2,
+};
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -95,7 +111,7 @@ void Error_Handler(void);
 #define TCK_GPIO_Port GPIOA
 #define ADS1115_INT_Pin GPIO_PIN_15
 #define ADS1115_INT_GPIO_Port GPIOA
-#define TOUCH_INT_Pin GPIO_PIN_1
+#define TOUCH_INT_Pin GPIO_PIN_15
 #define TOUCH_INT_GPIO_Port GPIOB
 #define SPI3_CS_Pin GPIO_PIN_2
 #define SPI3_CS_GPIO_Port GPIOD

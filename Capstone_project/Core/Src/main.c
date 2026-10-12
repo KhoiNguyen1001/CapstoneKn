@@ -66,14 +66,14 @@ UART_HandleTypeDef huart2;
 osThreadId_t LowPriorityHandle;
 const osThreadAttr_t LowPriority_attributes = {
   .name = "LowPriority",
-  .stack_size = 1024 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* Definitions for DataAcquisition */
 osThreadId_t DataAcquisitionHandle;
 const osThreadAttr_t DataAcquisition_attributes = {
   .name = "DataAcquisition",
-  .stack_size = 1024 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for myMutex01 */
@@ -83,6 +83,7 @@ const osMutexAttr_t myMutex01_attributes = {
 };
 /* USER CODE BEGIN PV */
 float shunt_v;
+module_status_t module_status;
 ILI9488_HandleTypeDef lcd;
 Touch_Handle_t touch_lcd;
 ads1115_t ads1115a;
@@ -90,6 +91,7 @@ INA226_HandleTypeDef ina226;
 uint16_t ina226_alert_status;
 DS3231_HandleTypeDef DS3231_Handler;
 DS3231_TimeDate td;
+
 LogRecord_t LogRecord_data;
 
 #define DS3231_ADDRESS 0x68 << 1
@@ -127,6 +129,8 @@ void Data_Acquisition(void *argument);
 void Set_SPI_Speed(uint32_t prescaler);
 void load_control(uint8_t relay, GPIO_PinState state);
 void LCD_TFT_init(void);
+void display_measure_page(void);
+void display_about_page(void);
 
 void on_new_sample(LogRecord_t *records);
 void logging_task(void);
@@ -186,10 +190,10 @@ int main(void)
 
   LCD_TFT_init();
   Touch_Init(&touch_lcd, &hi2c2, GT911_ADDRESS);
-  ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
-  INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
-  INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
-  INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
+  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
+  module_status.ina226_status = INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
+  module_status.ina226_status = INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
+  module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
 
   /* USER CODE END 2 */
@@ -686,7 +690,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : TOUCH_INT_Pin */
   GPIO_InitStruct.Pin = TOUCH_INT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(TOUCH_INT_GPIO_Port, &GPIO_InitStruct);
 
@@ -716,10 +720,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   if (GPIO_Pin == INA226_INT_Pin)
   {
     INA226_data_ready = true;
-  }
-  if (GPIO_Pin == TOUCH_INT_Pin)
-  {
-    touch_lcd.irq_flag = true;
   }
 }
 
@@ -774,21 +774,42 @@ void LCD_TFT_init(void)
   ILI9488_Init(&lcd, ILI9488_ROTATION_0);
   ILI9488_FillScreen(&lcd, ILI9488_COLOR_BLACK);
 
+  LCD_draw_tab_button(&lcd, 5, 90,  "ABOUT",   false);
+  LCD_draw_tab_button(&lcd, 100, 100, "MEASURE", true);
+  LCD_draw_tab_button(&lcd, 205, 100, "SETTING", false);
+
+  module_status.lcd_page = MEASURE_PAGE;
+  display_measure_page();
+}
+
+void display_measure_page(void)
+{
   ILI9488_FillRect(&lcd, 5, 45, 310, 2, ILI9488_COLOR_DGRAY);
   ILI9488_FillRect(&lcd, 5, 135, 310, 2, ILI9488_COLOR_DGRAY);
   ILI9488_FillRect(&lcd, 5, 295, 310, 2, ILI9488_COLOR_DGRAY);
   ILI9488_FillRect(&lcd, 5, 420, 310, 2, ILI9488_COLOR_DGRAY);
 
-  LCD_draw_tab_button(&lcd, 5, 90,  "ABOUT",   false);
-  LCD_draw_tab_button(&lcd, 100, 100, "MEASURE", true);
-  LCD_draw_tab_button(&lcd, 205, 100, "SETTING", false);
-
   ILI9488_Print(&lcd, 15, 60, "CURRENT:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 100, "BUS VOLT:", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(&lcd, 15, 150, "BATTERY_1:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(&lcd, 15, 185, "BATTERY_2:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(&lcd, 15, 220, "BATTERY_3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(&lcd, 15, 255, "BATTERY_4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 150, "Cell 1:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 185, "Cell 2:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 220, "Cell 3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 255, "Cell 4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 315, "SD STATUS:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+
+}
+
+void display_about_page(void)
+{
+  ILI9488_Print(&lcd, 15, 60, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_FillRect(&lcd, 5, 80, 310, 2, ILI9488_COLOR_DGRAY);
+
+  ILI9488_Print(&lcd, 15, 100, "Firmware version: V2026.B", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 135, "ADS1115:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 170, "INA226:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 205, "SD CARD:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 240, "Time:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 275, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 }
 
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
@@ -861,15 +882,13 @@ void Low_priority(void *argument)
   sd_mount();
   Set_SPI_Speed(SPI_BAUDRATEPRESCALER_16);
   
-  //ILI9488_Print(&lcd, 15, 60, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
-  if (csv_create_with_header(current_filename, sizeof(current_filename)) == FR_OK)
+  module_status.sd_card_status = csv_create_with_header(current_filename, sizeof(current_filename));
+  if (module_status.sd_card_status == FR_OK)
   {
-    ILI9488_Print(&lcd, 15, 100 +215, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
     ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   }
   else
   {
-    ILI9488_Print(&lcd, 15, 100 +215, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
     ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
   }
   while(true)
@@ -880,28 +899,49 @@ void Low_priority(void *argument)
     if (LCD_refresh_count > 200)
     {
       LCD_refresh_count = 0;
-      sprintf(buffer, "%.5f A   ", LogRecord_data.current_A);
-      ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-      sprintf(buffer, "%.5f V   ", LogRecord_data.bus_voltage_V);
-      ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      if(module_status.lcd_page == MEASURE_PAGE)
+      {
+        sprintf(buffer, "%.5f A   ", LogRecord_data.current_A);
+        ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+        sprintf(buffer, "%.5f V   ", LogRecord_data.bus_voltage_V);
+        ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 
-      sprintf(buffer, "%.5f V   ", LogRecord_data.cell_voltage_V);
-      switch (LogRecord_data.cell_id) {
-        case 1:
-          ILI9488_Print(&lcd,160, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-          break;
-        case 2:
-          ILI9488_Print(&lcd,160, 185, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-          break;
-        case 3:
-          ILI9488_Print(&lcd,160, 220, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-          break;
-        default:
-          ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-          break;
+        sprintf(buffer, "%.5f V   ", LogRecord_data.cell_voltage_V);
+        switch (LogRecord_data.cell_id) {
+          case 1:
+            ILI9488_Print(&lcd,160, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            break;
+          case 2:
+            ILI9488_Print(&lcd,160, 185, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            break;
+          case 3:
+            ILI9488_Print(&lcd,160, 220, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            break;
+          default:
+            ILI9488_Print(&lcd,130, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            break;
+        }
       }
-      Touch_Point_t p[TOUCH_MAX_POINTS];
-      int n = Touch_Read(&touch_lcd, p, TOUCH_MAX_POINTS);
+
+      if(touch_process(&touch_lcd, &module_status.lcd_page))
+      {
+        /// reinit page
+        for (int i = 0; i < 3; i++)
+        {
+          LCD_draw_tab_button(&lcd, tabs[i].x, tabs[i].w, tabs[i].text, i == module_status.lcd_page);
+        }
+        ILI9488_FillRect(&lcd, 0, 60, 480, 273, ILI9488_COLOR_BLACK);
+        if(module_status.lcd_page == MEASURE_PAGE)
+        {
+          display_measure_page();
+          if (module_status.sd_card_status == FR_OK)
+            ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+          else
+            ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
+        }
+        if(module_status.lcd_page == ABOUT_PAGE)   display_about_page();
+      }
+      
     }
     osDelay(1);
   }

@@ -190,6 +190,7 @@ void LCD_draw_tab_button(ILI9488_HandleTypeDef *dev,
                                 uint16_t x, uint16_t w,
                                 const char *text, uint8_t active);
 
+
 #ifdef __cplusplus
 }
 #endif

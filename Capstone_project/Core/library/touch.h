@@ -10,6 +10,20 @@
 
 #define TOUCH_MAX_POINTS 5
 
+#define TAB_Y 8
+#define TAB_H 30
+
+typedef struct {
+    uint16_t x, w;
+    const char *text;
+} Tab_t;
+
+static const Tab_t tabs[3] = {
+    {   5,  90, "ABOUT"   },
+    { 100, 100, "MEASURE" },
+    { 205, 100, "SETTING" },
+};
+
 typedef enum {
     TOUCH_IC_GT911 = 0,   /* I2C addr 0x5D or 0x14, 16-bit registers */
     TOUCH_IC_FT5X  = 1    /* FT5436 / FT3267 etc., I2C addr 0x38, 8-bit registers */
@@ -51,4 +65,8 @@ HAL_StatusTypeDef Touch_Init(Touch_Handle_t *t, I2C_HandleTypeDef *hi2c, uint16_
  * Returns number of points (0 = released / no new data), or -1 on I2C error.
  */
 int Touch_Read(Touch_Handle_t *t, Touch_Point_t *pts, uint8_t max);
+
+
+int tab_hit(uint16_t px, uint16_t py);
+uint8_t touch_process(Touch_Handle_t * touch_lcd, uint8_t *active_tab);
 #endif /* TOUCH_H */
