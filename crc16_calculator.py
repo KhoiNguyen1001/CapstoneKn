@@ -50,16 +50,16 @@ def build_csv_line(timestamp: int,
 if __name__ == "__main__":
     # Your example values
     line = build_csv_line(
-        timestamp       = 4294880951,
-        timestamp_ms    = 107,          # the ".026" part
-        bus_voltage_V   = 0,
-        current_A       = 0.00092,
-        cell_voltage_V  = 0.00694,
-        cell_id         = 1,
+        timestamp       = 946684815,
+        timestamp_ms    = 124,          # the ".026" part
+        bus_voltage_V   = 0.00,
+        current_A       = 0.0000,
+        cell_voltage_V  = 0.00000,
+        cell_id         = 4,
     )
 
     # Show exactly what bytes were CRC'd (the payload, before the CRC field)
-    payload = build_csv_line(4294880951, 107, 0, 0.00092, 0.00694, 2, with_crc=False)
+    payload = build_csv_line(946684801, 30, 0, 0, 0, 4, with_crc=False)
     print("Payload repr :", repr(payload))
     print("Payload bytes:", payload.encode("ascii").hex(" "))
     print("CRC          : 0x{:04X}".format(calculate_crc16(payload.encode("ascii"))))

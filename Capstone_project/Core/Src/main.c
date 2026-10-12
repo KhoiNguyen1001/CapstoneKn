@@ -28,6 +28,7 @@
 #include "../library/ads1115.h"
 #include "../library/INA226.h"
 #include "../library/ili9488.h"
+#include "../library/touch.h"
 #include "../library/sd_functions.h"
 #include "../library/data_processing.h"
 #include "../library/DS3231.h"
@@ -83,6 +84,7 @@ const osMutexAttr_t myMutex01_attributes = {
 /* USER CODE BEGIN PV */
 float shunt_v;
 ILI9488_HandleTypeDef lcd;
+Touch_Handle_t touch_lcd;
 ads1115_t ads1115a;
 INA226_HandleTypeDef ina226;
 uint16_t ina226_alert_status;
@@ -91,12 +93,13 @@ DS3231_TimeDate td;
 LogRecord_t LogRecord_data;
 
 #define DS3231_ADDRESS 0x68 << 1
+#define GT911_ADDRESS 0x5D << 1
 #define LOG_RECORD_COUNT 250
 #define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
 
 char log_buffer_A[LOG_BUFFER_SIZE];
 char log_buffer_B[LOG_BUFFER_SIZE];
-char buffer[100];
+char buffer[20];
 char current_filename[16];
 
 uint32_t sample_count = 0;
@@ -182,11 +185,13 @@ int main(void)
   HAL_Delay(200);
 
   LCD_TFT_init();
+  Touch_Init(&touch_lcd, &hi2c2, GT911_ADDRESS);
   ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
   INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
   INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
   INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -679,6 +684,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(ADS1115_INT_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : TOUCH_INT_Pin */
+  GPIO_InitStruct.Pin = TOUCH_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(TOUCH_INT_GPIO_Port, &GPIO_InitStruct);
+
   /*Configure GPIO pin : SPI3_CS_Pin */
   GPIO_InitStruct.Pin = SPI3_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -705,6 +716,10 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   if (GPIO_Pin == INA226_INT_Pin)
   {
     INA226_data_ready = true;
+  }
+  if (GPIO_Pin == TOUCH_INT_Pin)
+  {
+    touch_lcd.irq_flag = true;
   }
 }
 
@@ -785,25 +800,25 @@ void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 		  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
-  // if ((new_len == active_len) || (sample_count > 220))
-  // {
-  //   osMutexAcquire(myMutex01Handle, osWaitForever);
-  //   if (flush_buf == NULL)
-  //   {
-  //     flush_buf = active_buf;
-  //     flush_len = active_len;
-  //     active_buf = (active_buf == log_buffer_A) ? log_buffer_B : log_buffer_A;
-  //     active_len = 0;
-  //     sample_count = 0;
-  //     // retry the sample into the now-empty active buffer
-  //     active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
-  //   }
-  //   osMutexRelease(myMutex01Handle);
-  // }
-  // else
-  // {
-  //   active_len = new_len;
-  // }
+   if ((new_len == active_len) || (sample_count > 220))
+   {
+     osMutexAcquire(myMutex01Handle, osWaitForever);
+     if (flush_buf == NULL)
+     {
+       flush_buf = active_buf;
+       flush_len = active_len;
+       active_buf = (active_buf == log_buffer_A) ? log_buffer_B : log_buffer_A;
+       active_len = 0;
+       sample_count = 0;
+       // retry the sample into the now-empty active buffer
+       active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
+     }
+     osMutexRelease(myMutex01Handle);
+   }
+   else
+   {
+     active_len = new_len;
+   }
 }
 
 void logging_task(void) // Run in low priority thread
@@ -872,20 +887,21 @@ void Low_priority(void *argument)
 
       sprintf(buffer, "%.5f V   ", LogRecord_data.cell_voltage_V);
       switch (LogRecord_data.cell_id) {
-		case 1:
-		  ILI9488_Print(&lcd,160, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-		  break;
-		case 2:
-		  ILI9488_Print(&lcd,160, 185, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-		  break;
-		case 3:
-		  ILI9488_Print(&lcd,160, 220, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-		  break;
-		default:
-		  ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-		  break;
+        case 1:
+          ILI9488_Print(&lcd,160, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+          break;
+        case 2:
+          ILI9488_Print(&lcd,160, 185, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+          break;
+        case 3:
+          ILI9488_Print(&lcd,160, 220, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+          break;
+        default:
+          ILI9488_Print(&lcd,160, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+          break;
       }
-
+      Touch_Point_t p[TOUCH_MAX_POINTS];
+      int n = Touch_Read(&touch_lcd, p, TOUCH_MAX_POINTS);
     }
     osDelay(1);
   }

@@ -95,6 +95,8 @@ void Error_Handler(void);
 #define TCK_GPIO_Port GPIOA
 #define ADS1115_INT_Pin GPIO_PIN_15
 #define ADS1115_INT_GPIO_Port GPIOA
+#define TOUCH_INT_Pin GPIO_PIN_1
+#define TOUCH_INT_GPIO_Port GPIOB
 #define SPI3_CS_Pin GPIO_PIN_2
 #define SPI3_CS_GPIO_Port GPIOD
 #define TFT_BL_Pin GPIO_PIN_5
