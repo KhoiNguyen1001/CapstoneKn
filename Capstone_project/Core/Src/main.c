@@ -804,7 +804,7 @@ void display_about_page(void)
   ILI9488_Print(&lcd, 15, 60, "SOLAR BATTERY MONITOR", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
   ILI9488_FillRect(&lcd, 5, 80, 310, 2, ILI9488_COLOR_DGRAY);
 
-  ILI9488_Print(&lcd, 15, 100, "Firmware version: V2026.B", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 100, "Firmware version: 1.01", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 135, "ADS1115:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 170, "INA226:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 205, "SD CARD:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
@@ -921,6 +921,10 @@ void Low_priority(void *argument)
             ILI9488_Print(&lcd,130, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
         }
+      }
+      else if(module_status.lcd_page == ABOUT_PAGE)
+      {
+        ILI9488_Print(&lcd, 160, 60, "", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
       }
 
       if(touch_process(&touch_lcd, &module_status.lcd_page))
