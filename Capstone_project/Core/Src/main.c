@@ -33,6 +33,7 @@
 #include "../library/data_processing.h"
 #include "../library/DS3231.h"
 #include "../rs485_library/epever_mppt.h"
+#include "../debug_rtc/rtc_uart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -195,6 +196,8 @@ int main(void)
   module_status.ina226_status = INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
+
+  rtc_uart_init();
 
   /* USER CODE END 2 */
 
@@ -815,10 +818,10 @@ void display_about_page(void)
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
-  printf("%lu.%03u,%.5f,%.5f,%u,%.5f\r\n",
-		  records->timestamp, records->timestamp_ms,
-		  records->bus_voltage_V, records->current_A,
-		  records->cell_id, records->cell_voltage_V);
+  // printf("%lu.%03u,%.5f,%.5f,%u,%.5f\r\n",
+	// 	  records->timestamp, records->timestamp_ms,
+	// 	  records->bus_voltage_V, records->current_A,
+	// 	  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
    if ((new_len == active_len) || (sample_count > 220))
@@ -909,16 +912,16 @@ void Low_priority(void *argument)
         sprintf(buffer, "%.5f V   ", LogRecord_data.cell_voltage_V);
         switch (LogRecord_data.cell_id) {
           case 1:
-            ILI9488_Print(&lcd,160, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            ILI9488_Print(&lcd,120, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
           case 2:
-            ILI9488_Print(&lcd,160, 185, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            ILI9488_Print(&lcd,120, 185, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
           case 3:
-            ILI9488_Print(&lcd,160, 220, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            ILI9488_Print(&lcd,120, 220, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
           default:
-            ILI9488_Print(&lcd,130, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+            ILI9488_Print(&lcd,120, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
         }
       }
@@ -962,9 +965,10 @@ void Low_priority(void *argument)
 void Data_Acquisition(void *argument)
 {
   /* USER CODE BEGIN Data_Acquisition */
-  static uint8_t cell_id_prev = 4; LogRecord_data.cell_id = 4;
+  static uint8_t cell_id_prev = 8, cell_id = 8;
   static uint32_t os_time_pre = 0;
   uint32_t os_time, os_time_elapsed;
+  float discard_measusement;
   
   DS3231_GetTimeDate(&DS3231_Handler, &td);
   os_time = osKernelGetTickCount();
@@ -973,25 +977,31 @@ void Data_Acquisition(void *argument)
   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
   while(true)
   {
+    rtc_uart_process(&td);
     if (ADS1115_IsDataReady())
     {
-      LogRecord_data.cell_id--;
-      osDelay(1);
-      ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
-
-      switch (LogRecord_data.cell_id)
+      osDelay(5);
+      if(cell_id%2 == 1) // discard first sample after switch channel
       {
-      case 1:
+	    LogRecord_data.cell_id = cell_id/2 + 1;
+        ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
+      }
+      else ADS1115_ReadResult(&ads1115a, &discard_measusement);
+      cell_id--;
+
+      switch (cell_id)
+      {
+      case 2:
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
         break;
-      case 2:
+      case 4:
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
         break;
-      case 3:
+      case 6:
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
         break;
-      default:
-    	  LogRecord_data.cell_id = 4; //if cell_id = 0 -> cell_id = 4
+      case 0:
+	    cell_id = 8; //if cell_id = 0 -> cell_id = 4
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
         break;
       }
@@ -1012,16 +1022,16 @@ void Data_Acquisition(void *argument)
       LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
       LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
       on_new_sample(&LogRecord_data);
-      cell_id_prev = LogRecord_data.cell_id;
+      cell_id_prev = cell_id;
     }
 
     // Logging data (voltage)
-    if(LogRecord_data.cell_id != cell_id_prev)
+    if(cell_id != cell_id_prev)
     {
       LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
       LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
       on_new_sample(&LogRecord_data);
-      cell_id_prev = LogRecord_data.cell_id;
+      cell_id_prev = cell_id;
     }
 
     if(os_time_elapsed >= 900000)

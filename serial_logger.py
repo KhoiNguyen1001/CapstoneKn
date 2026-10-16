@@ -62,7 +62,7 @@ class SerialReader(threading.Thread):
                 return
             if not data:
                 continue
-            print("RAW:", data) 
+            # print("RAW:", data) 
             buffer.extend(data)
             while True:
                 idx = buffer.find(b"\n")
