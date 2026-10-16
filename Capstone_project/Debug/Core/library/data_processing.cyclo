@@ -1,4 +1,0 @@
-../Core/library/data_processing.c:17:9:csv_create_with_header	9
-../Core/library/data_processing.c:49:9:csv_flush_buffer	6
-../Core/library/data_processing.c:80:8:csv_append_sample	5
-../Core/library/data_processing.c:115:10:CalculateCRC16	4

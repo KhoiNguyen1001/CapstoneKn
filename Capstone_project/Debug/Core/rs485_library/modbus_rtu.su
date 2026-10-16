@@ -1,8 +1,0 @@
-../Core/rs485_library/modbus_rtu.c:11:10:Modbus_CRC16	24	static
-../Core/rs485_library/modbus_rtu.c:43:24:modbus_transceive	56	static
-../Core/rs485_library/modbus_rtu.c:107:24:modbus_read_registers	136	static
-../Core/rs485_library/modbus_rtu.c:145:17:Modbus_ReadHoldingRegisters	40	static
-../Core/rs485_library/modbus_rtu.c:152:17:Modbus_ReadInputRegisters	40	static
-../Core/rs485_library/modbus_rtu.c:159:17:Modbus_ReadDiscreteInputs	112	static
-../Core/rs485_library/modbus_rtu.c:198:17:Modbus_WriteSingleRegister	72	static
-../Core/rs485_library/modbus_rtu.c:226:17:Modbus_WriteMultipleRegisters	144	static
