@@ -148,20 +148,6 @@ void rtc_uart_init(void)
     HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
 }
 
-static void send_resp(uint8_t r) { HAL_UART_Transmit(&huart2, &r, 1, 50); }
-
-static void send_time_frame(const DS3231_TimeDate *t)
-{
-    uint8_t f[3 + PAYLOAD_LEN + 1];
-    f[0] = FRAME_SOF;
-    f[1] = CMD_TIME_RESP;
-    f[2] = PAYLOAD_LEN;
-    f[3] = t->year;  f[4] = t->month;  f[5] = t->day;  f[6] = t->dayOfWeek;
-    f[7] = t->hours;  f[8] = t->minutes; f[9] = t->seconds;
-    f[10] = crc8(&f[1], 2 + PAYLOAD_LEN);
-    HAL_UART_Transmit(&huart2, f, sizeof(f), 100);
-}
-
 /* call from main loop */
 void rtc_uart_process(DS3231_TimeDate *t)
 {
@@ -179,20 +165,14 @@ void rtc_uart_process(DS3231_TimeDate *t)
     case CMD_SET_TIME:
         if (len == PAYLOAD_LEN && time_is_valid(t) &&
             DS3231_SetTimeDate(&DS3231_Handler, t) == HAL_OK)
-            send_resp(RESP_ACK);
-        else
-            send_resp(RESP_NAK);
-        break;
-
-    case CMD_GET_TIME:
-        if (DS3231_SetTimeDate(&DS3231_Handler, t) == HAL_OK)
-            send_time_frame(t);
-        else
-            send_resp(RESP_NAK);
+            //no need to send response, check routine status
+        //     send_resp(RESP_ACK);
+        // else
+        //     send_resp(RESP_NAK);
         break;
 
     default:            /* unknown command or CRC error */
-        send_resp(RESP_NAK);
+        // send_resp(RESP_NAK);
         break;
     }
 }

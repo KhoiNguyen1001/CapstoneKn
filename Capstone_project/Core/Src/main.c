@@ -197,8 +197,6 @@ int main(void)
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
 
-  rtc_uart_init();
-
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -818,10 +816,10 @@ void display_about_page(void)
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
-  // printf("%lu.%03u,%.5f,%.5f,%u,%.5f\r\n",
-	// 	  records->timestamp, records->timestamp_ms,
-	// 	  records->bus_voltage_V, records->current_A,
-	// 	  records->cell_id, records->cell_voltage_V);
+  printf("%lu.%03u,%.5f,%.5f,%u,%.5f\r\n",
+		  records->timestamp, records->timestamp_ms,
+		  records->bus_voltage_V, records->current_A,
+		  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
    if ((new_len == active_len) || (sample_count > 220))
@@ -843,6 +841,8 @@ void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
    {
      active_len = new_len;
    }
+
+   memset(records,0,sizeof(LogRecord_t));// clear record
 }
 
 void logging_task(void) // Run in low priority thread
@@ -899,7 +899,7 @@ void Low_priority(void *argument)
     logging_task();
     
     LCD_refresh_count++;
-    if (LCD_refresh_count > 200)
+    if (LCD_refresh_count > 100)
     {
       LCD_refresh_count = 0;
       if(module_status.lcd_page == MEASURE_PAGE)
@@ -929,9 +929,13 @@ void Low_priority(void *argument)
       {
         ILI9488_Print(&lcd, 160, 60, "", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
       }
+    }
 
+    if(LCD_refresh_count%50 == 0)
+    {
       if(touch_process(&touch_lcd, &module_status.lcd_page))
       {
+        LCD_refresh_count = 0;
         /// reinit page
         for (int i = 0; i < 3; i++)
         {
@@ -948,9 +952,8 @@ void Low_priority(void *argument)
         }
         if(module_status.lcd_page == ABOUT_PAGE)   display_about_page();
       }
-      
     }
-    osDelay(1);
+    osDelay(2);
   }
   /* USER CODE END 5 */
 }
@@ -970,6 +973,7 @@ void Data_Acquisition(void *argument)
   uint32_t os_time, os_time_elapsed;
   float discard_measusement;
   
+  rtc_uart_init();// uart IT for Ds3231 setting
   DS3231_GetTimeDate(&DS3231_Handler, &td);
   os_time = osKernelGetTickCount();
   os_time_pre = os_time;
@@ -983,12 +987,16 @@ void Data_Acquisition(void *argument)
       osDelay(5);
       if(cell_id%2 == 1) // discard first sample after switch channel
       {
-	    LogRecord_data.cell_id = cell_id/2 + 1;
+	      LogRecord_data.cell_id = cell_id/2 + 1;
         ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
       }
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
       cell_id--;
 
+      //Calibration code modification BEGIN 
+      cell_id = 7; // fixed cell_id 
+      cell_id_prev = 8;
+      //Calibration code modification END
       switch (cell_id)
       {
       case 2:
