@@ -38,10 +38,6 @@ extern DS3231_HandleTypeDef DS3231_Handler;
 #define PAYLOAD_LEN      7
 #define RX_TIMEOUT_MS    100
 
-/* ---------- helpers ---------- */
-static uint8_t bin2bcd(uint8_t v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
-static uint8_t bcd2bin(uint8_t v) { return (uint8_t)(((v >> 4) * 10) + (v & 0x0F)); }
-
 static uint8_t crc8(const uint8_t *data, uint8_t len)
 {
     uint8_t crc = 0;
@@ -53,13 +49,13 @@ static uint8_t crc8(const uint8_t *data, uint8_t len)
     return crc;
 }
 
-static uint8_t time_is_valid(const DS3231_TimeDate *t)
+static uint8_t payload_is_valid(const uint8_t *p)
 {
-    return t->year <= 99 &&
-           t->month  >= 1 && t->month <= 12 &&
-           t->day   >= 1 && t->day  <= 31 &&
-           t->dayOfWeek >= 1 && t->dayOfWeek <= 7 &&
-           t->hours <= 23 && t->minutes <= 59 && t->seconds <= 59;
+    return p[0] <= 99 &&                    /* year   */
+           p[1] >= 1 && p[1] <= 12 &&       /* month  */
+           p[2] >= 1 && p[2] <= 31 &&       /* date   */
+           p[3] >= 1 && p[3] <= 7  &&       /* weekday */
+           p[4] <= 23 && p[5] <= 59 && p[6] <= 59;
 }
 
 /* ---------- UART frame parser (runs in RX interrupt) ---------- */
@@ -158,21 +154,21 @@ void rtc_uart_process(DS3231_TimeDate *t)
     if (!frame_ready) return;
 
     uint8_t cmd = frame_cmd, len = frame_len;
-    memcpy(t, frame_data, sizeof(DS3231_TimeDate) < len ? sizeof(DS3231_TimeDate) : len);
+    uint8_t d[PAYLOAD_LEN];
+    memcpy(d, frame_data, PAYLOAD_LEN);
     frame_ready = 0;
 
-    switch (cmd) {
-    case CMD_SET_TIME:
-        if (len == PAYLOAD_LEN && time_is_valid(t) &&
-            DS3231_SetTimeDate(&DS3231_Handler, t) == HAL_OK)
-            //no need to send response, check routine status
-        //     send_resp(RESP_ACK);
-        // else
-        //     send_resp(RESP_NAK);
-        break;
+    if (cmd == CMD_SET_TIME && len == PAYLOAD_LEN && payload_is_valid(d))
+    {
+        /* use YOUR struct's field names here */
+        t->year    = d[0];
+        t->month   = d[1];
+        t->day   = d[2];
+        t->dayOfWeek     = d[3];   /* weekday */
+        t->hours   = d[4];
+        t->minutes = d[5];
+        t->seconds = d[6];
 
-    default:            /* unknown command or CRC error */
-        // send_resp(RESP_NAK);
-        break;
+        DS3231_SetTimeDate(&DS3231_Handler, t);
     }
 }

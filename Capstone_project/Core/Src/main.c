@@ -191,7 +191,7 @@ int main(void)
 
   LCD_TFT_init();
   Touch_Init(&touch_lcd, &hi2c2, GT911_ADDRESS);
-  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
+  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_8SPS);
   module_status.ina226_status = INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
   module_status.ina226_status = INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
@@ -590,7 +590,8 @@ static void MX_USART2_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
-
+  HAL_NVIC_SetPriority(USART2_IRQn, 0, 1);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
   /* USER CODE END USART2_Init 2 */
 
 }

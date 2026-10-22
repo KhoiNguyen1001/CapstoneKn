@@ -85,7 +85,7 @@ size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogR
   int len = snprintf(start, avail,
                      "%lu.%03u,%.5f,%.5f,%.5f,%u",
                      (unsigned long)records->timestamp,
-                     (unsigned char)records->timestamp_ms,
+                     records->timestamp_ms,
                      records->bus_voltage_V,
                      records->current_A,
                      records->cell_voltage_V,
