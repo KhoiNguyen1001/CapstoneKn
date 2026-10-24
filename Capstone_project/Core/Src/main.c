@@ -94,6 +94,7 @@ DS3231_HandleTypeDef DS3231_Handler;
 DS3231_TimeDate td;
 
 LogRecord_t LogRecord_data;
+LogRecord_t LogRecord_data_LCD;
 
 #define DS3231_ADDRESS 0x68 << 1
 #define GT911_ADDRESS 0x5D << 1
@@ -102,7 +103,7 @@ LogRecord_t LogRecord_data;
 
 char log_buffer_A[LOG_BUFFER_SIZE];
 char log_buffer_B[LOG_BUFFER_SIZE];
-char buffer[20];
+char buffer[30];
 char current_filename[16];
 
 uint32_t sample_count = 0;
@@ -812,6 +813,11 @@ void display_about_page(void)
   ILI9488_Print(&lcd, 15, 205, "SD CARD:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 240, "Time:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 275, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+
+  if (module_status.sd_card_status == FR_OK)
+    ILI9488_Print(&lcd, 160, 275, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  else
+    ILI9488_Print(&lcd, 160, 275, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
 }
 
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
@@ -823,27 +829,37 @@ void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 		  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
-   if ((new_len == active_len) || (sample_count > 220))
-   {
-     osMutexAcquire(myMutex01Handle, osWaitForever);
-     if (flush_buf == NULL)
-     {
-       flush_buf = active_buf;
-       flush_len = active_len;
-       active_buf = (active_buf == log_buffer_A) ? log_buffer_B : log_buffer_A;
-       active_len = 0;
-       sample_count = 0;
-       // retry the sample into the now-empty active buffer
-       active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
-     }
-     osMutexRelease(myMutex01Handle);
-   }
-   else
-   {
-     active_len = new_len;
-   }
+  if ((new_len == active_len) || (sample_count > 220))
+  {
+    osMutexAcquire(myMutex01Handle, osWaitForever);
+    if (flush_buf == NULL)
+    {
+      flush_buf = active_buf;
+      flush_len = active_len;
+      active_buf = (active_buf == log_buffer_A) ? log_buffer_B : log_buffer_A;
+      active_len = 0;
+      sample_count = 0;
+      // retry the sample into the now-empty active buffer
+      active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
+    }
+    osMutexRelease(myMutex01Handle);
+  }
+  else
+  {
+    active_len = new_len;
+  }
 
-   memset(records,0,sizeof(LogRecord_t));// clear record
+  LogRecord_data_LCD.timestamp = LogRecord_data.timestamp;
+  if (records->cell_id != 0) // make sure we only update the LCD with cell voltage if it's a cell voltage record
+  {
+    LogRecord_data_LCD.cell_id = records->cell_id;
+    LogRecord_data_LCD.cell_voltage_V = records->cell_voltage_V;
+  }
+  else { // if it's a bus voltage/current record, update the LCD with those values
+    LogRecord_data_LCD.bus_voltage_V = records->bus_voltage_V;
+    LogRecord_data_LCD.current_A = records->current_A;
+  }
+  memset(records,0,sizeof(LogRecord_t));// clear record
 }
 
 void logging_task(void) // Run in low priority thread
@@ -905,13 +921,13 @@ void Low_priority(void *argument)
       LCD_refresh_count = 0;
       if(module_status.lcd_page == MEASURE_PAGE)
       {
-        sprintf(buffer, "%.5f A   ", LogRecord_data.current_A);
+        sprintf(buffer, "%.5f A   ", LogRecord_data_LCD.current_A);
         ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-        sprintf(buffer, "%.5f V   ", LogRecord_data.bus_voltage_V);
+        sprintf(buffer, "%.5f V   ", LogRecord_data_LCD.bus_voltage_V);
         ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 
-        sprintf(buffer, "%.5f V   ", LogRecord_data.cell_voltage_V);
-        switch (LogRecord_data.cell_id) {
+        sprintf(buffer, "%.5f V   ", LogRecord_data_LCD.cell_voltage_V);
+        switch (LogRecord_data_LCD.cell_id) {
           case 1:
             ILI9488_Print(&lcd,120, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
@@ -928,7 +944,9 @@ void Low_priority(void *argument)
       }
       else if(module_status.lcd_page == ABOUT_PAGE)
       {
-        ILI9488_Print(&lcd, 160, 60, "", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+    	uint32_t sod = LogRecord_data_LCD.timestamp % 86400u;
+        sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year,(uint8_t) sod/3600,(uint8_t) (sod%3600)/60, (uint8_t) sod%60);
+        ILI9488_Print(&lcd, 80, 240, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
       }
     }
 
@@ -951,7 +969,7 @@ void Low_priority(void *argument)
           else
             ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
         }
-        if(module_status.lcd_page == ABOUT_PAGE)   display_about_page();
+        if(module_status.lcd_page == ABOUT_PAGE)  display_about_page();
       }
     }
     osDelay(2);
@@ -973,7 +991,9 @@ void Data_Acquisition(void *argument)
   static uint32_t os_time_pre = 0;
   uint32_t os_time, os_time_elapsed;
   float discard_measusement;
-  
+  module_status.channel_calib_settings = 4; // default channel for calibration
+  module_status.channel_calib_settings_cached = 4; // default channel for calibration
+
   rtc_uart_init();// uart IT for Ds3231 setting
   DS3231_GetTimeDate(&DS3231_Handler, &td);
   os_time = osKernelGetTickCount();
@@ -994,9 +1014,16 @@ void Data_Acquisition(void *argument)
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
       cell_id--;
 
-      //Calibration code modification BEGIN 
-      cell_id = 7; // fixed cell_id 
-      cell_id_prev = 8;
+      //Calibration code modification BEGIN
+      cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
+      cell_id_prev = cell_id + 1; //8;
+
+      if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
+      {
+        module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
+        cell_id = module_status.channel_calib_settings*2;
+        cell_id_prev = cell_id + 1;
+      }
       //Calibration code modification END
       switch (cell_id)
       {

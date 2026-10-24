@@ -27,6 +27,7 @@
 
 extern UART_HandleTypeDef huart2;    /* change to your UART handle */
 extern DS3231_HandleTypeDef DS3231_Handler;
+extern module_status_t module_status;
 
 #define FRAME_SOF        0xAA
 #define CMD_SET_TIME     0x01
@@ -155,20 +156,27 @@ void rtc_uart_process(DS3231_TimeDate *t)
 
     uint8_t cmd = frame_cmd, len = frame_len;
     uint8_t d[PAYLOAD_LEN];
-    memcpy(d, frame_data, PAYLOAD_LEN);
+    memcpy(d, frame_data, len); 
     frame_ready = 0;
 
     if (cmd == CMD_SET_TIME && len == PAYLOAD_LEN && payload_is_valid(d))
     {
         /* use YOUR struct's field names here */
-        t->year    = d[0];
+        t->year    = 2000 + d[0];
         t->month   = d[1];
-        t->day   = d[2];
+        t->day     = d[2];
         t->dayOfWeek     = d[3];   /* weekday */
         t->hours   = d[4];
         t->minutes = d[5];
         t->seconds = d[6];
 
         DS3231_SetTimeDate(&DS3231_Handler, t);
+    }
+    else if(cmd == 0xFC)
+    {
+        if (len == 1)
+        {
+            module_status.channel_calib_settings = d[0];
+        }
     }
 }

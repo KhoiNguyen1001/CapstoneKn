@@ -49,7 +49,9 @@ def main():
         payload = bytes([now.year - 2000, now.month, now.day,
                          now.isoweekday(),              # 1 = Monday ... 7 = Sunday
                          now.hour, now.minute, now.second])
-        ser.write(frame(CMD_SET, payload))
+        #ser.write(frame(CMD_SET, payload))
+        setting = 3
+        ser.write(frame(0xFC, bytes([setting]))) 
         r = ser.read(1)
         print("ACK - time set to", now.strftime("%Y-%m-%d %H:%M:%S")
               if r == bytes([ACK]) else f"failed (response: {r.hex() or 'none'})")

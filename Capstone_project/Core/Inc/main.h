@@ -54,6 +54,8 @@ typedef struct
   uint8_t lcd_page;
   uint8_t ds3231_status;
   uint8_t mppt_status;
+  uint8_t channel_calib_settings;
+  uint8_t channel_calib_settings_cached;
 } module_status_t;
 
 enum lcd_page_t{
