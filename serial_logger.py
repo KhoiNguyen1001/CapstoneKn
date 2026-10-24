@@ -291,7 +291,7 @@ class App(tk.Tk):
             self.set_status(f'Ignored malformed line: "{line}"')
             return
         timestamp, bus_v, current, cell_id, cell_v = parsed
-        row = (timestamp, f"{bus_v:.5f}", f"{current:.5f}", cell_id, f"{cell_v:.5f}")
+        row = (timestamp, f"{bus_v:.5f}", f"{current:.5f}", cell_id, f"{cell_v:.7f}")
 
         self.table.insert("", "end", values=row)
         children = self.table.get_children()
