@@ -1,0 +1,54 @@
+/**
+ * touch.h - Minimal STM32 HAL driver for I2C capacitive touch (GT911 / FT5x36)
+ * Ported from the register logic in DFRobot_Touch.cpp
+ */
+#ifndef TOUCH_H
+#define TOUCH_H
+
+#include "main.h"   /* pulls in the HAL for your device family */
+#include <stdint.h>
+
+#define TOUCH_MAX_POINTS 5
+
+typedef enum {
+    TOUCH_IC_GT911 = 0,   /* I2C addr 0x5D or 0x14, 16-bit registers */
+    TOUCH_IC_FT5X  = 1    /* FT5436 / FT3267 etc., I2C addr 0x38, 8-bit registers */
+} Touch_IC_t;
+
+typedef struct {
+    uint8_t  id;
+    uint16_t x;
+    uint16_t y;
+    uint16_t size;        /* GT911 only, 0 on FT5x */
+} Touch_Point_t;
+
+typedef struct {
+    /* --- fill these in before Touch_Init --- */
+    I2C_HandleTypeDef *hi2c;
+    uint8_t      addr7;           /* 7-bit address: 0x5D / 0x14 (GT911), 0x38 (FT5x) */
+    // Touch_IC_t   ic;
+    // GPIO_TypeDef *rst_port;       /* NULL if RST not wired */
+    // uint16_t     rst_pin;
+    // GPIO_TypeDef *irq_port;       /* INT pin, configured as EXTI */
+    // uint16_t     irq_pin;
+    // uint32_t     irq_edge;        /* GPIO_MODE_IT_RISING (GT911 default) or GPIO_MODE_IT_FALLING (FT5x) */
+    uint16_t     width;           /* display width  in pixels (after rotation) */
+    uint16_t     height;          /* display height in pixels (after rotation) */
+    uint8_t      swap_xy;         /* 1 = swap X and Y axes */
+    uint8_t      invert_x;        /* 1 = x = width-1-x  (applied after swap) */
+    uint8_t      invert_y;        /* 1 = y = height-1-y (applied after swap) */
+
+    /* --- internal --- */
+    uint16_t     raw_w, raw_h;    /* chip's native resolution (GT911) */
+    volatile uint8_t irq_flag;
+} Touch_Handle_t;
+
+/** Reset chip, select I2C address, set up the INT pin as EXTI. Returns HAL_OK on success. */
+HAL_StatusTypeDef Touch_Init(Touch_Handle_t *t, I2C_HandleTypeDef *hi2c, uint16_t addr)
+
+/**
+ * Read current touch points (up to max, max <= TOUCH_MAX_POINTS).
+ * Returns number of points (0 = released / no new data), or -1 on I2C error.
+ */
+int Touch_Read(Touch_Handle_t *t, Touch_Point_t *pts, uint8_t max);
+#endif /* TOUCH_H */

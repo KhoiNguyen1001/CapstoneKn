@@ -192,7 +192,7 @@ int main(void)
 
   LCD_TFT_init();
   Touch_Init(&touch_lcd, &hi2c2, GT911_ADDRESS);
-  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_8SPS);
+  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
   module_status.ina226_status = INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
   module_status.ina226_status = INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
@@ -823,7 +823,7 @@ void display_about_page(void)
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
-  printf("%lu.%03u,%.5f,%.5f,%u,%.5f\r\n",
+  printf("%lu.%03u,%.5f,%.5f,%u,%.7f\r\n",
 		  records->timestamp, records->timestamp_ms,
 		  records->bus_voltage_V, records->current_A,
 		  records->cell_id, records->cell_voltage_V);
@@ -944,7 +944,7 @@ void Low_priority(void *argument)
       }
       else if(module_status.lcd_page == ABOUT_PAGE)
       {
-    	uint32_t sod = LogRecord_data_LCD.timestamp % 86400u;
+    	  uint32_t temp_day = ((LogRecord_data_LCD.timestamp/86400) % 86400u);
         sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year,(uint8_t) sod/3600,(uint8_t) (sod%3600)/60, (uint8_t) sod%60);
         ILI9488_Print(&lcd, 80, 240, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
       }
