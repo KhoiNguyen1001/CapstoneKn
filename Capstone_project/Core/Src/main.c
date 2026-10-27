@@ -921,12 +921,12 @@ void Low_priority(void *argument)
       LCD_refresh_count = 0;
       if(module_status.lcd_page == MEASURE_PAGE)
       {
-        sprintf(buffer, "%.5f A   ", LogRecord_data_LCD.current_A);
+        sprintf(buffer, "%.7f A   ", LogRecord_data_LCD.current_A);
         ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
-        sprintf(buffer, "%.5f V   ", LogRecord_data_LCD.bus_voltage_V);
+        sprintf(buffer, "%.7f V   ", LogRecord_data_LCD.bus_voltage_V);
         ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 
-        sprintf(buffer, "%.5f V   ", LogRecord_data_LCD.cell_voltage_V);
+        sprintf(buffer, "%.7f V   ", LogRecord_data_LCD.cell_voltage_V);
         switch (LogRecord_data_LCD.cell_id) {
           case 1:
             ILI9488_Print(&lcd,120, 150, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
@@ -944,8 +944,11 @@ void Low_priority(void *argument)
       }
       else if(module_status.lcd_page == ABOUT_PAGE)
       {
-    	  uint32_t temp_day = ((LogRecord_data_LCD.timestamp/86400) % 86400u);
-        sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year,(uint8_t) sod/3600,(uint8_t) (sod%3600)/60, (uint8_t) sod%60);
+        uint32_t sod = LogRecord_data_LCD.timestamp % 86400u;
+        uint8_t temp = sod / 3600;
+        temp = (int)((sod % 3600) / 60);
+        temp = (int)(sod % 60);
+        sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year, td.hours,(int)((sod % 3600) / 60), (int)(sod % 60));
         ILI9488_Print(&lcd, 80, 240, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
       }
     }
@@ -1015,14 +1018,17 @@ void Data_Acquisition(void *argument)
       cell_id--;
 
       //Calibration code modification BEGIN
-      cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
-      cell_id_prev = cell_id + 1; //8;
-
-      if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
+      if(module_status.channel_calib_settings != 0)
       {
-        module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
-        cell_id = module_status.channel_calib_settings*2;
-        cell_id_prev = cell_id + 1;
+        cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
+        cell_id_prev = cell_id + 1; //8;
+
+        if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
+        {
+          module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
+          cell_id = module_status.channel_calib_settings*2;
+          cell_id_prev = cell_id + 1;
+        }
       }
       //Calibration code modification END
       switch (cell_id)
