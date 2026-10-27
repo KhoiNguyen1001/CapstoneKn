@@ -96,6 +96,11 @@ DS3231_TimeDate td;
 LogRecord_t LogRecord_data;
 LogRecord_t LogRecord_data_LCD;
 
+#define DS3231_ADDRESS 0x68 << 1
+#define GT911_ADDRESS 0x5D << 1
+#define LOG_RECORD_COUNT 250
+#define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
+
 char log_buffer_A[LOG_BUFFER_SIZE];
 char log_buffer_B[LOG_BUFFER_SIZE];
 char buffer[30];
@@ -106,6 +111,13 @@ char *active_buf = log_buffer_A;
 char *flush_buf = NULL;
 size_t active_len = 0;
 size_t flush_len = 0;
+
+const float calib_coeff [4][2] = {
+  {0.000172786, 0.510557359},
+  {0.000172786, 0.510557359},
+  {0.000172786, 0.510557359},
+  {0.000172786, 0.510557359}
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -940,9 +952,6 @@ void Low_priority(void *argument)
       else if(module_status.lcd_page == ABOUT_PAGE)
       {
         uint32_t sod = LogRecord_data_LCD.timestamp % 86400u;
-        uint8_t temp = sod / 3600;
-        temp = (int)((sod % 3600) / 60);
-        temp = (int)(sod % 60);
         sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year, td.hours,(int)((sod % 3600) / 60), (int)(sod % 60));
         ILI9488_Print(&lcd, 80, 240, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
       }
@@ -1007,8 +1016,10 @@ void Data_Acquisition(void *argument)
       if(cell_id%2 == 1) // discard first sample after switch channel
       {
 	      LogRecord_data.cell_id = cell_id/2 + 1;
-        ADS1115_ReadResult(&ads1115a, &discard_measusement);
-        //LogRecord_data.cell_voltage_V = (discard_measusement - 0.000172786)/0.510557359;
+        
+        //ADS1115_ReadResult(&ads1115a, &discard_measusement);
+        //LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id][0])
+        // /calib_coeff[LogRecord_data.cell_id][1];
         ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
       }
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
