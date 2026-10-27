@@ -36,6 +36,18 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+#define DS3231_ADDRESS 0x68 << 1
+#define GT911_ADDRESS 0x5D << 1
+#define LOG_RECORD_COUNT 250
+#define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
+
+const float calib_coeff [4][2] = {
+  {0.000172786, 0.510557359},
+  {0.000172786, 0.510557359},
+  {0.000172786, 0.510557359},
+  {0.000172786, 0.510557359}
+};
+
 typedef struct
 {
   uint32_t timestamp;

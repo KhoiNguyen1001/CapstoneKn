@@ -96,11 +96,6 @@ DS3231_TimeDate td;
 LogRecord_t LogRecord_data;
 LogRecord_t LogRecord_data_LCD;
 
-#define DS3231_ADDRESS 0x68 << 1
-#define GT911_ADDRESS 0x5D << 1
-#define LOG_RECORD_COUNT 250
-#define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
-
 char log_buffer_A[LOG_BUFFER_SIZE];
 char log_buffer_B[LOG_BUFFER_SIZE];
 char buffer[30];
@@ -1009,6 +1004,8 @@ void Data_Acquisition(void *argument)
       if(cell_id%2 == 1) // discard first sample after switch channel
       {
 	      LogRecord_data.cell_id = cell_id/2 + 1;
+        ADS1115_ReadResult(&ads1115a, &discard_measusement);
+        //LogRecord_data.cell_voltage_V = (discard_measusement - 0.000172786)/0.510557359;
         ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
       }
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
