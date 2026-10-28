@@ -99,7 +99,7 @@ LogRecord_t LogRecord_data_LCD;
 #define DS3231_ADDRESS 0x68 << 1
 #define GT911_ADDRESS 0x5D << 1
 #define LOG_RECORD_COUNT 250
-#define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
+#define LOG_BUFFER_SIZE 12288*3 // 12 KB — up to 250 rows/ 1sample=40byte
 
 char log_buffer_A[LOG_BUFFER_SIZE];
 char log_buffer_B[LOG_BUFFER_SIZE];
@@ -199,7 +199,7 @@ int main(void)
 
   LCD_TFT_init();
   Touch_Init(&touch_lcd, &hi2c2, GT911_ADDRESS);
-  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
+  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_860SPS);
   module_status.ina226_status = INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
   module_status.ina226_status = INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
@@ -231,7 +231,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* creation of LowPriority */
-  LowPriorityHandle = osThreadNew(Low_priority, NULL, &LowPriority_attributes);
+  //LowPriorityHandle = osThreadNew(Low_priority, NULL, &LowPriority_attributes);
 
   /* creation of DataAcquisition */
   DataAcquisitionHandle = osThreadNew(Data_Acquisition, NULL, &DataAcquisition_attributes);
@@ -830,13 +830,13 @@ void display_about_page(void)
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
-  printf("%lu.%03u,%.5f,%.5f,%u,%.7f\r\n",
-		  records->timestamp, records->timestamp_ms,
-		  records->bus_voltage_V, records->current_A,
-		  records->cell_id, records->cell_voltage_V);
+  // printf("%lu.%03u,%.5f,%.5f,%u,%.7f\r\n",
+	// 	  records->timestamp, records->timestamp_ms,
+	// 	  records->bus_voltage_V, records->current_A,
+	// 	  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
-  if ((new_len == active_len) || (sample_count > 220))
+  if ((new_len == active_len) || (sample_count > 1000))
   {
     osMutexAcquire(myMutex01Handle, osWaitForever);
     if (flush_buf == NULL)
@@ -848,6 +848,7 @@ void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
       sample_count = 0;
       // retry the sample into the now-empty active buffer
       active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
+      printf("%.*s", (int)flush_len, flush_buf);
     }
     osMutexRelease(myMutex01Handle);
   }
@@ -1001,7 +1002,7 @@ void Data_Acquisition(void *argument)
   module_status.channel_calib_settings = 4; // default channel for calibration
   module_status.channel_calib_settings_cached = 4; // default channel for calibration
 
-  rtc_uart_init();// uart IT for Ds3231 setting
+  // rtc_uart_init();// uart IT for Ds3231 setting
   DS3231_GetTimeDate(&DS3231_Handler, &td);
   os_time = osKernelGetTickCount();
   os_time_pre = os_time;
@@ -1009,10 +1010,10 @@ void Data_Acquisition(void *argument)
   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
   while(true)
   {
-    rtc_uart_process(&td);
+    //rtc_uart_process(&td);
     if (ADS1115_IsDataReady())
     {
-      osDelay(5);
+      //osDelay(5);
       if(cell_id%2 == 1) // discard first sample after switch channel
       {
 	      LogRecord_data.cell_id = cell_id/2 + 1;
@@ -1023,57 +1024,57 @@ void Data_Acquisition(void *argument)
         ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
       }
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
-      cell_id--;
+      // cell_id--;
 
       //Calibration code modification BEGIN
-      if(module_status.channel_calib_settings != 0)
-      {
+      // if(module_status.channel_calib_settings != 0)
+      // {
         cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
         cell_id_prev = cell_id + 1; //8;
 
-        if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
-        {
-          module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
-          cell_id = module_status.channel_calib_settings*2;
-          cell_id_prev = cell_id + 1;
-        }
-      }
+        // if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
+        // {
+        //   module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
+        //   cell_id = module_status.channel_calib_settings*2;
+        //   cell_id_prev = cell_id + 1;
+        // }
+      // }
       //Calibration code modification END
-      switch (cell_id)
-      {
-      case 2:
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
-        break;
-      case 4:
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
-        break;
-      case 6:
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
-        break;
-      case 0:
-	    cell_id = 8; //if cell_id = 0 -> cell_id = 4
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
-        break;
-      }
+      // switch (cell_id)
+      // {
+      // case 2:
+      //   ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
+      //   break;
+      // case 4:
+      //   ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
+      //   break;
+      // case 6:
+      //   ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
+      //   break;
+      // case 0:
+	    // cell_id = 8; //if cell_id = 0 -> cell_id = 4
+      //   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
+      //   break;
+      // }
     }
 
     os_time = osKernelGetTickCount();
     os_time_elapsed = os_time - os_time_pre;
-    if (INA226_data_ready)
-    {
-      osDelay(1);
-      INA226_data_ready = false;
-      INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
-      INA226_ReadShuntVoltage(&ina226, &shunt_v);
-      INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
-      INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
+    // if (INA226_data_ready)
+    // {
+    //   osDelay(1);
+    //   INA226_data_ready = false;
+    //   INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
+    //   INA226_ReadShuntVoltage(&ina226, &shunt_v);
+    //   INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
+    //   INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
       
-      // Logging data (voltage and current)
-      LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
-      LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
-      on_new_sample(&LogRecord_data);
-      cell_id_prev = cell_id;
-    }
+    //   // Logging data (voltage and current)
+    //   LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
+    //   LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
+    //   on_new_sample(&LogRecord_data);
+    //   cell_id_prev = cell_id;
+    // }
 
     // Logging data (voltage)
     if(cell_id != cell_id_prev)
@@ -1089,7 +1090,7 @@ void Data_Acquisition(void *argument)
       os_time_pre = os_time;
       DS3231_GetTimeDate(&DS3231_Handler, &td);
     }
-    osDelay(1);
+    // osDelay(1);
   }
   /* USER CODE END Data_Acquisition */
 }

@@ -23,7 +23,7 @@ from datetime import datetime
 import serial
 import serial.tools.list_ports
 
-CSV_HEADER = ["TIMESTAMP", "BUS_VOLT_V", "CURRENT_A", "CELL_ID", "CELL_VOLT_V"]
+CSV_HEADER = ["TIMESTAMP", "CELL_VOLT_V"]
 
 
 def choose_port():
@@ -72,10 +72,12 @@ def main():
             f.flush()
         try:
             while True:
-                raw = ser.readline()          # waits for '\n' or the 1 s timeout
+                raw = ser.read_until(b"\n", size=200)
                 if not raw:
                     continue
                 line = raw.decode("utf-8", errors="replace").strip()   # also strips '\r'
+                if not raw.endswith(b"\n"):
+                    print(f"WARNING: no line ending in {len(raw)} bytes: {raw[:60]!r}")
                 if not line:
                     continue
                 f.write(line + "\n")

@@ -82,14 +82,15 @@ size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogR
   char *start = buf + current_offset;
   size_t avail = buf_size - current_offset;
 
-  int len = snprintf(start, avail,
-                     "%lu.%03u,%.5f,%.5f,%.5f,%u",
-                     (unsigned long)records->timestamp,
-                     records->timestamp_ms,
-                     records->bus_voltage_V,
-                     records->current_A,
-                     records->cell_voltage_V,
-                     records->cell_id);
+  int len = snprintf(start, avail, "%lu.%03u,%.7f\r\n",
+                    //  "%lu.%03u,%.5f,%.5f,%.5f,%u",
+                    (unsigned long)records->timestamp,
+                    records->timestamp_ms,
+                    //  records->bus_voltage_V,
+                    //  records->current_A,
+                     records->cell_voltage_V//,
+                    //  records->cell_id
+                    );
 
   if (len < 0 || (size_t)len >= (buf_size - current_offset))
   {
@@ -97,19 +98,19 @@ size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogR
     return current_offset;
   }
 
-  uint16_t crc = CalculateCRC16((const uint8_t *)start, len);
+  // uint16_t crc = CalculateCRC16((const uint8_t *)start, len);
 
-  int len2 = snprintf(start + len, avail - len, ",%04X\r\n", crc);
-  if (len2 < 0 || (size_t)len2 >= avail - len)
-  {
-    // Wouldn't fit — don't corrupt/truncate, just report "no change"
-    return current_offset;
-  }
+  // int len2 = snprintf(start + len, avail - len, ",%04X\r\n", crc);
+  // if (len2 < 0 || (size_t)len2 >= avail - len)
+  // {
+  //   // Wouldn't fit — don't corrupt/truncate, just report "no change"
+  //   return current_offset;
+  // }
 
   // for (int i = 0; i < len + len2; i++) printf("%02X ", (uint8_t)start[i]);
   // printf("\n");
 
-  return current_offset + (size_t)(len + len2);
+  return current_offset + (size_t)(len + 0);//len2);
 }
 
 uint16_t CalculateCRC16(const uint8_t *data, size_t length)
