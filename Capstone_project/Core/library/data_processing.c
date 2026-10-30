@@ -18,7 +18,7 @@ FRESULT csv_create_with_header(char *out_filename, size_t out_size)
 {
   FIL fil;
   FRESULT res;
-  static const char header[] = "TIMESTAMP,BUS_VOLT_uV,CURRENT_uA,CELL_VOLT_10uV,CELL_ID,CRC16\r\n";
+  static const char header[] = "TIMESTAMP,BUS_VOLT_uV,CURRENT_uA,CELL_VOLT_0.1uV,CELL_ID,CRC16\r\n";
 
   for (int i = 0; i < 1000; i++)
   {

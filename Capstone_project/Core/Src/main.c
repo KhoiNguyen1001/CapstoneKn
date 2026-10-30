@@ -113,10 +113,11 @@ size_t active_len = 0;
 size_t flush_len = 0;
 
 const float calib_coeff [4][2] = {
+  {8.74366452186E-05, 0.510554768},
   {0.000172786, 0.510557359},
   {0.000172786, 0.510557359},
-  {0.000172786, 0.510557359},
-  {0.000172786, 0.510557359}
+
+  {8.74366452186E-05, 0.510554768},
 };
 /* USER CODE END PV */
 
@@ -969,10 +970,6 @@ void Low_priority(void *argument)
         if(module_status.lcd_page == MEASURE_PAGE)
         {
           display_measure_page();
-          if (module_status.sd_card_status == FR_OK)
-            ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-          else
-            ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
         }
         if(module_status.lcd_page == ABOUT_PAGE)  display_about_page();
       }
@@ -1018,10 +1015,9 @@ void Data_Acquisition(void *argument)
       {
 	      LogRecord_data.cell_id = cell_id/2 + 1;
         
-        //ADS1115_ReadResult(&ads1115a, &discard_measusement);
-        //LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id][0])
-        // /calib_coeff[LogRecord_data.cell_id][1];
-        ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
+        ADS1115_ReadResult(&ads1115a, &discard_measusement);
+        LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id - 1][0]) / calib_coeff[LogRecord_data.cell_id - 1][1];
+        //ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
         on_new_sample(&LogRecord_data);
       }
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
