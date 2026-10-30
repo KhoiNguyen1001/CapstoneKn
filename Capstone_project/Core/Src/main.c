@@ -98,8 +98,8 @@ LogRecord_t LogRecord_data_LCD;
 
 #define DS3231_ADDRESS 0x68 << 1
 #define GT911_ADDRESS 0x5D << 1
-#define LOG_RECORD_COUNT 250
-#define LOG_BUFFER_SIZE 12288 // 12 KB — up to 250 rows/ 1sample=40byte
+#define LOG_RECORD_COUNT 475
+#define LOG_BUFFER_SIZE 12288*2 // 12 KB — up to 250 rows/ 1sample=40byte
 
 char log_buffer_A[LOG_BUFFER_SIZE];
 char log_buffer_B[LOG_BUFFER_SIZE];
@@ -200,7 +200,7 @@ int main(void)
 
   LCD_TFT_init();
   Touch_Init(&touch_lcd, &hi2c2, GT911_ADDRESS);
-  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_32SPS);
+  module_status.ads1115_status = ADS1115_Init(&ads1115a, &hi2c3, ADS1115_ADDR_GND, ADS_REG_CONFIG_PGA_2_048V, ADS_REG_CONFIG_DR_860SPS);
   module_status.ina226_status = INA226_Init(&ina226, &hi2c1, INA226_ADDR, 0.0025, 30);
   module_status.ina226_status = INA226_SetAlertFunction(&ina226, INA226_MASK_CNVR);
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
@@ -806,7 +806,7 @@ void display_measure_page(void)
   ILI9488_Print(&lcd, 15, 185, "Cell 2:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 220, "Cell 3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 255, "Cell 4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(&lcd, 15, 315, "SD STATUS:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 315, "Time:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
 
 }
 
@@ -831,13 +831,13 @@ void display_about_page(void)
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
 {
   sample_count++;
-  printf("%lu.%03u,%.5f,%.5f,%u,%.7f\r\n",
-		  records->timestamp, records->timestamp_ms,
-		  records->bus_voltage_V, records->current_A,
-		  records->cell_id, records->cell_voltage_V);
+  // printf("%lu.%03u,%.5f,%.5f,%u,%.7f\r\n",
+	// 	  records->timestamp, records->timestamp_ms,
+	// 	  records->bus_voltage_V, records->current_A,
+	// 	  records->cell_id, records->cell_voltage_V);
   size_t new_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, active_len, records);
 
-  if ((new_len == active_len) || (sample_count > 220))
+  if ((new_len == active_len) || (sample_count > 1000))
   {
     osMutexAcquire(myMutex01Handle, osWaitForever);
     if (flush_buf == NULL)
@@ -851,6 +851,7 @@ void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
       active_len = csv_append_sample(active_buf, LOG_BUFFER_SIZE, 0, records);
     }
     osMutexRelease(myMutex01Handle);
+    //printf("%.*s", (int)flush_len, flush_buf);
   }
   else
   {
@@ -886,7 +887,6 @@ void logging_task(void) // Run in low priority thread
   if (local_flush_buf != NULL && local_flush_len > 0)
   {
     csv_flush_buffer(current_filename, local_flush_buf, local_flush_len);
-
     osMutexAcquire(myMutex01Handle, osWaitForever);
     flush_buf = NULL;   // only clear after the write actually completes
     osMutexRelease(myMutex01Handle);
@@ -909,16 +909,10 @@ void Low_priority(void *argument)
   HAL_Delay(500);
   sd_mount();
   Set_SPI_Speed(SPI_BAUDRATEPRESCALER_16);
-  
   module_status.sd_card_status = csv_create_with_header(current_filename, sizeof(current_filename));
-  if (module_status.sd_card_status == FR_OK)
-  {
-    ILI9488_Print(&lcd, 160, 315, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  }
-  else
-  {
-    ILI9488_Print(&lcd, 160, 315, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
-  }
+
+  uint32_t sod;
+  
   while(true)
   {
     logging_task();
@@ -933,6 +927,9 @@ void Low_priority(void *argument)
         ILI9488_Print(&lcd, 160, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
         sprintf(buffer, "%.7f V   ", LogRecord_data_LCD.bus_voltage_V);
         ILI9488_Print(&lcd, 160, 100, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+        sod = LogRecord_data_LCD.timestamp % 86400u;
+        sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year, td.hours,(int)((sod % 3600) / 60), (int)(sod % 60));
+        ILI9488_Print(&lcd, 80, 315, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 
         sprintf(buffer, "%.7f V   ", LogRecord_data_LCD.cell_voltage_V);
         switch (LogRecord_data_LCD.cell_id) {
@@ -952,7 +949,7 @@ void Low_priority(void *argument)
       }
       else if(module_status.lcd_page == ABOUT_PAGE)
       {
-        uint32_t sod = LogRecord_data_LCD.timestamp % 86400u;
+        sod = LogRecord_data_LCD.timestamp % 86400u;
         sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year, td.hours,(int)((sod % 3600) / 60), (int)(sod % 60));
         ILI9488_Print(&lcd, 80, 240, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
       }
@@ -995,14 +992,13 @@ void Low_priority(void *argument)
 void Data_Acquisition(void *argument)
 {
   /* USER CODE BEGIN Data_Acquisition */
-  static uint8_t cell_id_prev = 8, cell_id = 8;
+  static uint8_t cell_id = 8;
   static uint32_t os_time_pre = 0;
   uint32_t os_time, os_time_elapsed;
   float discard_measusement;
   module_status.channel_calib_settings = 4; // default channel for calibration
   module_status.channel_calib_settings_cached = 4; // default channel for calibration
 
-  rtc_uart_init();// uart IT for Ds3231 setting
   DS3231_GetTimeDate(&DS3231_Handler, &td);
   os_time = osKernelGetTickCount();
   os_time_pre = os_time;
@@ -1010,10 +1006,14 @@ void Data_Acquisition(void *argument)
   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
   while(true)
   {
-    rtc_uart_process(&td);
+    //rtc_uart_process(&td);
+    os_time = osKernelGetTickCount();
+    os_time_elapsed = os_time - os_time_pre;
+    LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
+    LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
+
     if (ADS1115_IsDataReady())
     {
-      osDelay(5);
       if(cell_id%2 == 1) // discard first sample after switch channel
       {
 	      LogRecord_data.cell_id = cell_id/2 + 1;
@@ -1022,6 +1022,7 @@ void Data_Acquisition(void *argument)
         //LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id][0])
         // /calib_coeff[LogRecord_data.cell_id][1];
         ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
+        on_new_sample(&LogRecord_data);
       }
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
       cell_id--;
@@ -1030,13 +1031,12 @@ void Data_Acquisition(void *argument)
       if(module_status.channel_calib_settings != 0)
       {
         cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
-        cell_id_prev = cell_id + 1; //8;
+        //cell_id_prev = cell_id + 1; //8;
 
         if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
         {
           module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
           cell_id = module_status.channel_calib_settings*2;
-          cell_id_prev = cell_id + 1;
         }
       }
       //Calibration code modification END
@@ -1056,41 +1056,30 @@ void Data_Acquisition(void *argument)
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
         break;
       }
-    }
-
-    os_time = osKernelGetTickCount();
-    os_time_elapsed = os_time - os_time_pre;
-    if (INA226_data_ready)
-    {
+    } 
+    else {
       osDelay(1);
-      INA226_data_ready = false;
-      INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
-      INA226_ReadShuntVoltage(&ina226, &shunt_v);
-      INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
-      INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
-      
-      // Logging data (voltage and current)
-      LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
-      LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
-      on_new_sample(&LogRecord_data);
-      cell_id_prev = cell_id;
     }
 
-    // Logging data (voltage)
-    if(cell_id != cell_id_prev)
-    {
-      LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
-      LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
-      on_new_sample(&LogRecord_data);
-      cell_id_prev = cell_id;
-    }
+     if (INA226_data_ready)
+     {
+       INA226_data_ready = false;
+       INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
+       INA226_ReadShuntVoltage(&ina226, &shunt_v);
+       INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
+       INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
+      
+       // Logging data (voltage and current)
+       LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
+       LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
+       on_new_sample(&LogRecord_data);
+     }
 
     if(os_time_elapsed >= 900000)
     {
       os_time_pre = os_time;
       DS3231_GetTimeDate(&DS3231_Handler, &td);
     }
-    osDelay(1);
   }
   /* USER CODE END Data_Acquisition */
 }
