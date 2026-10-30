@@ -18,7 +18,7 @@ FRESULT csv_create_with_header(char *out_filename, size_t out_size)
 {
   FIL fil;
   FRESULT res;
-  static const char header[] = "TIMESTAMP,BUS_VOLT_V,CURRENT_A,CELL_VOLT_V,CELL_ID,CRC16\r\n";
+  static const char header[] = "TIMESTAMP,BUS_VOLT_uV,CURRENT_uA,CELL_VOLT_10uV,CELL_ID,CRC16\r\n";
 
   for (int i = 0; i < 1000; i++)
   {
@@ -82,14 +82,18 @@ size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogR
   char *start = buf + current_offset;
   size_t avail = buf_size - current_offset;
 
+  uint32_t cell_x10uV = (uint32_t)(records->cell_voltage_V * 10000000.0f);
+  uint32_t bus_uV     = (uint32_t)(records->bus_voltage_V  * 1000000.0f);
+  uint32_t cur_uA     = (uint32_t)(records->current_A      * 1000000.0f);
+  
   int len = snprintf(start, avail,
                     // "%lu.%03u,%.7f,%u\r\n",
-                    "%lu.%03u,%.5f,%.5f,%.7f,%u\r\n",
+                    "%lu.%03u,%lu,%lu,%lu,%u\r\n",
                     (unsigned long)records->timestamp,
                     records->timestamp_ms,
-                    records->bus_voltage_V,
-                    records->current_A,
-                    records->cell_voltage_V,
+                    bus_uV,
+                    cur_uA,
+                    cell_x10uV,
                     records->cell_id
                     );
 
