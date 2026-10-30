@@ -25,7 +25,7 @@ bool ADS1115_ReadResult(ads1115_t *ads, float *raw)
     if (raw == NULL) {
         return false;
     }
-
+    ads1115_data_ready = false;
     uint16_t result;
     if (!ads1115_read_register(ads, ADS_REG_CONVERSION_ADDRESS, &result)) {
         return false;
@@ -33,8 +33,7 @@ bool ADS1115_ReadResult(ads1115_t *ads, float *raw)
 
     // FSR = ±2.048V over 15 bits (16-bit signed, one bit for sign)
     *raw = (float)(result * 2.048f / 32768.0f);
-
-    ads1115_data_ready = false;
+    
     return true;
 }
 
@@ -45,19 +44,32 @@ bool ads1115_write_register(ads1115_t *ads, uint8_t reg, uint16_t value)
     buf[1] = (uint8_t)(value >> 8);
     buf[2] = (uint8_t)(value & 0xFF);
 
-    return HAL_I2C_Master_Transmit(ads->i2c_handle, ads->address, buf, 3, ADS1xxx_TIMEOUT) == HAL_OK;
+    if (HAL_I2C_Master_Transmit(ads->i2c_handle, ads->address, buf, 3, ADS1xxx_TIMEOUT) != HAL_OK) {
+        ads->ptr = 0xFF;
+        return false;
+    }
+    ads->ptr = reg;
+    return true;
 }
 
 bool ads1115_read_register(ads1115_t *ads, uint8_t reg, uint16_t *value)
 {
-    uint8_t ptr = reg;
     uint8_t buf[2];
 
-    if (HAL_I2C_Master_Transmit(ads->i2c_handle, ads->address, &ptr, 1, ADS1xxx_TIMEOUT) != HAL_OK) {
-        return false;
+    if (ads->ptr != reg) 
+    {  
+        if (HAL_I2C_Mem_Read(ads->i2c_handle, ads->address, reg,
+                            I2C_MEMADD_SIZE_8BIT, buf, 2, ADS1xxx_TIMEOUT) != HAL_OK) {
+            ads->ptr = 0xFF;
+            return false;
+        }
+        ads->ptr = reg;
     }
-    if (HAL_I2C_Master_Receive(ads->i2c_handle, ads->address, buf, 2, ADS1xxx_TIMEOUT) != HAL_OK) {
-        return false;
+    else {
+        if (HAL_I2C_Master_Receive(ads->i2c_handle, ads->address, buf, 2, ADS1xxx_TIMEOUT) != HAL_OK) {
+            ads->ptr = 0xFF;
+            return false;
+        }
     }
 
     *value = ((uint16_t)buf[0] << 8) | buf[1];

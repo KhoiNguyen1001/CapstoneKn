@@ -180,6 +180,7 @@ typedef enum {
 typedef struct {
     I2C_HandleTypeDef *i2c_handle;
     uint16_t address;
+    uint8_t ptr;
     ads1115_fsr_t gain;
     ads1115_sps_t sps;
     uint16_t config;
