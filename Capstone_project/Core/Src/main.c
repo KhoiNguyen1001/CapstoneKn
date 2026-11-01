@@ -113,9 +113,9 @@ size_t active_len = 0;
 size_t flush_len = 0;
 
 const float calib_coeff [4][2] = {
-  {8.74366452186E-05, 0.510554768},
-  {0.000172786, 0.510557359},
-  {0.000172786, 0.510557359},
+  {0, 1},
+  {0, 1},
+  {0, 1},
 
   {8.74366452186E-05, 0.510554768},
 };
@@ -327,7 +327,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x10D19CE4;
+  hi2c1.Init.Timing = 0x00F12981;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -600,7 +600,7 @@ static void MX_USART2_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
-  HAL_NVIC_SetPriority(USART2_IRQn, 0, 1);
+  HAL_NVIC_SetPriority(USART2_IRQn, 0, 4);
   HAL_NVIC_EnableIRQ(USART2_IRQn);
   /* USER CODE END USART2_Init 2 */
 
@@ -913,11 +913,12 @@ void Low_priority(void *argument)
   module_status.sd_card_status = csv_create_with_header(current_filename, sizeof(current_filename));
 
   uint32_t sod;
-  
+  rtc_uart_init();
   while(true)
   {
+    rtc_uart_process(&td);
     logging_task();
-    
+
     LCD_refresh_count++;
     if (LCD_refresh_count > 100)
     {
@@ -1003,7 +1004,6 @@ void Data_Acquisition(void *argument)
   ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
   while(true)
   {
-    //rtc_uart_process(&td);
     os_time = osKernelGetTickCount();
     os_time_elapsed = os_time - os_time_pre;
     LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
@@ -1052,16 +1052,13 @@ void Data_Acquisition(void *argument)
         ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
         break;
       }
-    } 
-    else {
-      osDelay(1);
     }
 
      if (INA226_data_ready)
      {
        INA226_data_ready = false;
        INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
-       INA226_ReadShuntVoltage(&ina226, &shunt_v);
+      //  INA226_ReadShuntVoltage(&ina226, &shunt_v);
        INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
        INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
       
@@ -1076,6 +1073,7 @@ void Data_Acquisition(void *argument)
       os_time_pre = os_time;
       DS3231_GetTimeDate(&DS3231_Handler, &td);
     }
+    osDelay(1);
   }
   /* USER CODE END Data_Acquisition */
 }
