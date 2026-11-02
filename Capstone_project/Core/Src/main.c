@@ -1008,50 +1008,50 @@ void Data_Acquisition(void *argument)
     LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
     LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
 
-    if (ADS1115_IsDataReady())
-    {
-      if(cell_id%2 == 1) // discard first sample after switch channel
-      {
-	      LogRecord_data.cell_id = cell_id/2 + 1;
+    // if (ADS1115_IsDataReady())
+    // {
+    //   if(cell_id%2 == 1) // discard first sample after switch channel
+    //   {
+	  //     LogRecord_data.cell_id = cell_id/2 + 1;
         
-        ADS1115_ReadResult(&ads1115a, &discard_measusement);
-        LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id - 1][0]) / calib_coeff[LogRecord_data.cell_id - 1][1];
-        //ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
-        on_new_sample(&LogRecord_data);
-      }
-      else ADS1115_ReadResult(&ads1115a, &discard_measusement);
-      cell_id--;
+    //     ADS1115_ReadResult(&ads1115a, &discard_measusement);
+    //     LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id - 1][0]) / calib_coeff[LogRecord_data.cell_id - 1][1];
+    //     //ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
+    //     on_new_sample(&LogRecord_data);
+    //   }
+    //   else ADS1115_ReadResult(&ads1115a, &discard_measusement);
+    //   cell_id--;
 
-      //Calibration code modification BEGIN
-      if(module_status.channel_calib_settings != 0)
-      {
-        cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
-        //cell_id_prev = cell_id + 1; //8;
+    //   //Calibration code modification BEGIN
+    //   if(module_status.channel_calib_settings != 0)
+    //   {
+    //     cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
+    //     //cell_id_prev = cell_id + 1; //8;
 
-        if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
-        {
-          module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
-          cell_id = module_status.channel_calib_settings*2;
-        }
-      }
-      //Calibration code modification END
-      switch (cell_id)
-      {
-      case 2:
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
-        break;
-      case 4:
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
-        break;
-      case 6:
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
-        break;
-      case 0:
-	    cell_id = 8; //if cell_id = 0 -> cell_id = 4
-        ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
-        break;
-      }
-    }
+    //     if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
+    //     {
+    //       module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
+    //       cell_id = module_status.channel_calib_settings*2;
+    //     }
+    //   }
+    //   //Calibration code modification END
+    //   switch (cell_id)
+    //   {
+    //   case 2:
+    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
+    //     break;
+    //   case 4:
+    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
+    //     break;
+    //   case 6:
+    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
+    //     break;
+    //   case 0:
+	  //   cell_id = 8; //if cell_id = 0 -> cell_id = 4
+    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
+    //     break;
+    //   }
+    // }
 
      if (INA226_data_ready)
      {
@@ -1060,10 +1060,6 @@ void Data_Acquisition(void *argument)
       //  INA226_ReadShuntVoltage(&ina226, &shunt_v);
        INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
        INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
-      
-       // Logging data (voltage and current)
-       LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
-       LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
        on_new_sample(&LogRecord_data);
      }
 

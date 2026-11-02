@@ -155,9 +155,9 @@ INA226_Status_t INA226_Init(INA226_HandleTypeDef *dev,
     /* Sensible defaults: max averaging window off (avg=1), 1.1ms conversion
      * times, continuous shunt+bus measurement. Caller can override afterward
      * with INA226_SetConfig(). */
-    status = INA226_SetConfig(dev, INA226_AVG_16,
-                               INA226_VCT_1100US, INA226_VCT_1100US,
-                               INA226_MODE_SHUNT_BUS_CONT);
+    status = INA226_SetConfig(dev, INA226_AVG_1,//INA226_AVG_16,
+                            INA226_VCT_140US, INA226_VCT_1100US,
+                            INA226_MODE_SHUNT_BUS_CONT);
     if (status != INA226_OK) {
         return status;
     }
