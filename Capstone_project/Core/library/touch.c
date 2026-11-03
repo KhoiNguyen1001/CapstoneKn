@@ -26,12 +26,6 @@ static HAL_StatusTypeDef reg16_write(Touch_Handle_t *t, uint16_t reg, const uint
                              I2C_MEMADD_SIZE_16BIT, (uint8_t *)buf, len, I2C_TIMEOUT_MS);
 }
 
-static HAL_StatusTypeDef reg8_read(Touch_Handle_t *t, uint8_t reg, uint8_t *buf, uint16_t len)
-{
-    return HAL_I2C_Mem_Read(t->hi2c, t->addr7, reg,
-                            I2C_MEMADD_SIZE_8BIT, buf, len, I2C_TIMEOUT_MS);
-}
-
 /* ---------- coordinate remap ---------- */
 static void remap(const Touch_Handle_t *t, uint16_t *x, uint16_t *y)
 {
