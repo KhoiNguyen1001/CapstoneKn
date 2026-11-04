@@ -812,6 +812,12 @@ void display_measure_page(void)
   ILI9488_Print(&lcd, 15, 255, "Cell 4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 315, "Time:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 370, "Load control:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+  
+  for(int i = 0; i < LOAD_CONTROL_RELAY4; i++)
+  {
+    LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
+      btns[j].text, load_state[j]);
+  }
 }
 
 void display_about_page(void)
@@ -922,6 +928,16 @@ void Low_priority(void *argument)
     logging_task();
 
     LCD_refresh_count++;
+    if(LogRecord_data_LCD.cell_voltage_V <= 2.60f && load_state[0] && load_state[1]
+     && load_state[2] && load_state[3]) {
+      memset(&load_state, 0, sizeof(load_state));
+      load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
+      for(int i = 0; i < LOAD_CONTROL_RELAY4; i++)
+      {
+        LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
+          btns[j].text, load_state[j]);
+      }
+    }
     if (LCD_refresh_count > 100)
     {
       LCD_refresh_count = 0;
@@ -962,7 +978,8 @@ void Low_priority(void *argument)
     if(LCD_refresh_count%50 == 0)
     {
       uint8_t r = touch_process(&touch_lcd, &module_status.lcd_page);
-      if(r >= STATE_BUTTONS_OFFSET && r < STATE_BUTTONS_OFFSET + LOAD_CONTROL_RELAY4)
+      if(r >= STATE_BUTTONS_OFFSET && r < STATE_BUTTONS_OFFSET + LOAD_CONTROL_RELAY4
+        && LogRecord_data_LCD.cell_voltage_V >= 2.60f)
       {
         uint8_t j = r - STATE_BUTTONS_OFFSET;
         load_state[j] ^= 1;
