@@ -26,12 +26,6 @@ static HAL_StatusTypeDef reg16_write(Touch_Handle_t *t, uint16_t reg, const uint
                              I2C_MEMADD_SIZE_16BIT, (uint8_t *)buf, len, I2C_TIMEOUT_MS);
 }
 
-static HAL_StatusTypeDef reg8_read(Touch_Handle_t *t, uint8_t reg, uint8_t *buf, uint16_t len)
-{
-    return HAL_I2C_Mem_Read(t->hi2c, t->addr7, reg,
-                            I2C_MEMADD_SIZE_8BIT, buf, len, I2C_TIMEOUT_MS);
-}
-
 /* ---------- coordinate remap ---------- */
 static void remap(const Touch_Handle_t *t, uint16_t *x, uint16_t *y)
 {
@@ -46,7 +40,7 @@ static void remap(const Touch_Handle_t *t, uint16_t *x, uint16_t *y)
 /* ---------- public API ---------- */
 HAL_StatusTypeDef Touch_Init(Touch_Handle_t *t, I2C_HandleTypeDef *hi2c, uint16_t addr)
 {
-    t->irq_flag = 0;
+    // t->irq_flag = 0;
     t->hi2c = hi2c;
     t->addr7 = addr;
 
@@ -130,6 +124,14 @@ uint8_t touch_process(Touch_Handle_t * touch_lcd, uint8_t *active_tab)
         if (i >= 0 && i != *active_tab) {
             *active_tab = i;
             changed = 1;
+        } else if (*active_tab == MEASURE_PAGE) {
+            for (int j = 0; j < LOAD_CONTROL_RELAY4; j++) {
+                //if (btns[i].tab_id == *active_tab)
+                if (p[0].y >= btns[i].y && p[0].y < btns[i].y + btns[i].h
+                && p[0].x >= btns[i].x && p[0].x < btns[i].x + btns[i].w)
+                    changed = j + STATE_BUTTONS_OFFSET;
+                    break;
+                }
         }
     }
     } else if (n == 0) {

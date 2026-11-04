@@ -681,20 +681,36 @@ void ILI9488_Print(ILI9488_HandleTypeDef *dev,
 }
 
 /* Draw one tab button in the header (active = filled, inactive = outline) */
-void LCD_draw_tab_button(ILI9488_HandleTypeDef *dev,
-                                uint16_t x, uint16_t w,
-                                const char *text, uint8_t active)
+// void LCD_draw_tab_button(ILI9488_HandleTypeDef *dev,
+//                                 uint16_t x, uint16_t w,
+//                                 const char *text, uint8_t active)
+// {
+//   uint16_t tx = x + (w - 12 * strlen(text)) / 2;   // 12 px per char at size 2
+//   if (active)
+//   {
+//     ILI9488_FillRect(dev, x, 8, w, 30, ILI9488_COLOR_CYAN);
+//     ILI9488_Print(dev, tx, 15, text, ILI9488_COLOR_BLACK, ILI9488_COLOR_CYAN, 2);
+//   }
+//   else
+//   {
+//     ILI9488_FillRect(dev, x, 8, w, 30, ILI9488_COLOR_BLACK);
+//     ILI9488_DrawRect(dev, x, 8, w, 30, ILI9488_COLOR_GRAY);
+//     ILI9488_Print(dev, tx, 15, text, ILI9488_COLOR_GRAY, ILI9488_COLOR_BLACK, 2);
+//   }
+// }
+
+void LCD_draw_button(ILI9488_HandleTypeDef *dev, uint16_t x, uint16_t w, 
+                                uint16_t y, uint16_t h, const char *text, uint8_t active)
 {
-  uint16_t tx = x + (w - 12 * strlen(text)) / 2;   // 12 px per char at size 2
-  if (active)
-  {
-    ILI9488_FillRect(dev, x, 8, w, 30, ILI9488_COLOR_CYAN);
-    ILI9488_Print(dev, tx, 15, text, ILI9488_COLOR_BLACK, ILI9488_COLOR_CYAN, 2);
-  }
-  else
-  {
-    ILI9488_FillRect(dev, x, 8, w, 30, ILI9488_COLOR_BLACK);
-    ILI9488_DrawRect(dev, x, 8, w, 30, ILI9488_COLOR_GRAY);
-    ILI9488_Print(dev, tx, 15, text, ILI9488_COLOR_GRAY, ILI9488_COLOR_BLACK, 2);
-  }
+    uint16_t tx = x + (w - 12 * strlen(text)) / 2;
+    uint16_t ty = y + (h - 16) / 2;
+
+    if (active) {
+        ILI9488_FillRect(dev, x, y, w, h, ILI9488_COLOR_GREEN);
+        ILI9488_Print(dev, tx, ty, text, ILI9488_COLOR_BLACK, ILI9488_COLOR_GREEN, 2);
+    } else {
+        ILI9488_FillRect(dev, x, y, w, h, ILI9488_COLOR_BLACK);
+        ILI9488_DrawRect(dev, x, y, w, h, ILI9488_COLOR_GRAY);
+        ILI9488_Print(dev, tx, ty, text, ILI9488_COLOR_GRAY, ILI9488_COLOR_BLACK, 2);
+    }
 }

@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #define TOUCH_MAX_POINTS 5
+#define STATE_BUTTONS_OFFSET 50
 
 #define TAB_Y 8
 #define TAB_H 30
@@ -18,10 +19,23 @@ typedef struct {
     const char *text;
 } Tab_t;
 
+typedef struct {
+    uint16_t x, w, y, h;
+    const char *text;
+    uint8_t tab_id;
+} Button_t;
+
 static const Tab_t tabs[3] = {
     {   5,  90, "ABOUT"   },
     { 100, 100, "MEASURE" },
     { 205, 100, "SETTING" },
+};
+
+static const Button_t btns[LOAD_CONTROL_RELAY4] = {
+    {   5, 100, 405 , 30 , "Load 1" , ABOUT_PAGE },
+    { 110, 100, 405 , 30 , "Load 2" , ABOUT_PAGE },
+    {   5, 100, 440 , 30 , "Load 3" , ABOUT_PAGE },
+    { 110, 100, 440 , 30 , "Load 4" , ABOUT_PAGE },
 };
 
 typedef enum {
@@ -54,7 +68,7 @@ typedef struct {
 
     /* --- internal --- */
     uint16_t     raw_w, raw_h;    /* chip's native resolution (GT911) */
-    volatile uint8_t irq_flag;
+    // volatile uint8_t irq_flag;
 } Touch_Handle_t;
 
 /** Reset chip, select I2C address, set up the INT pin as EXTI. Returns HAL_OK on success. */

@@ -112,12 +112,15 @@ char *flush_buf = NULL;
 size_t active_len = 0;
 size_t flush_len = 0;
 
-const float calib_coeff [4][2] = {
+uint8_t load_state[LOAD_CONTROL_RELAY4];
+const float calib_coeff [5][2] = {
   {-0.00384422, 0.51045767},
   {-0.00305992, 0.51049206}, 
   {-0.00310162, 0.51049930},
-  {0.000087366, 0.51055476}, //Channel 4 -> [3]
+  { 0.000087366, 0.51055476}, //Channel 4 -> [3]
+  {-0.000409116, 0.99740239}  // current calib
 };
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -785,11 +788,12 @@ void LCD_TFT_init(void)
   ILI9488_Init(&lcd, ILI9488_ROTATION_0);
   ILI9488_FillScreen(&lcd, ILI9488_COLOR_BLACK);
 
-  LCD_draw_tab_button(&lcd, 5, 90,  "ABOUT",   false);
-  LCD_draw_tab_button(&lcd, 100, 100, "MEASURE", true);
-  LCD_draw_tab_button(&lcd, 205, 100, "SETTING", false);
-
   module_status.lcd_page = MEASURE_PAGE;
+  for (int i = 0; i < 3; i++)
+  {
+	LCD_draw_button(&lcd, tabs[i].x, tabs[i].w, TAB_Y, TAB_H,
+      tabs[i].text, i == module_status.lcd_page);
+  }
   display_measure_page();
 }
 
@@ -798,7 +802,7 @@ void display_measure_page(void)
   ILI9488_FillRect(&lcd, 5, 45, 310, 2, ILI9488_COLOR_DGRAY);
   ILI9488_FillRect(&lcd, 5, 135, 310, 2, ILI9488_COLOR_DGRAY);
   ILI9488_FillRect(&lcd, 5, 295, 310, 2, ILI9488_COLOR_DGRAY);
-  ILI9488_FillRect(&lcd, 5, 420, 310, 2, ILI9488_COLOR_DGRAY);
+  ILI9488_FillRect(&lcd, 5, 355, 310, 2, ILI9488_COLOR_DGRAY);
 
   ILI9488_Print(&lcd, 15, 60, "CURRENT:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 100, "BUS VOLT:", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
@@ -807,7 +811,7 @@ void display_measure_page(void)
   ILI9488_Print(&lcd, 15, 220, "Cell 3:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 255, "Cell 4:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 315, "Time:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-
+  ILI9488_Print(&lcd, 15, 370, "Load control:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
 }
 
 void display_about_page(void)
@@ -820,12 +824,11 @@ void display_about_page(void)
   ILI9488_Print(&lcd, 15, 170, "INA226:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 205, "SD CARD:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 240, "Time:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
-  ILI9488_Print(&lcd, 15, 275, "SD STATUS:", ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
 
   if (module_status.sd_card_status == FR_OK)
-    ILI9488_Print(&lcd, 160, 275, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+    ILI9488_Print(&lcd, 160, 205, "GOOD   ", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   else
-    ILI9488_Print(&lcd, 160, 275, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
+    ILI9488_Print(&lcd, 160, 205, "ERROR   ", ILI9488_COLOR_RED, ILI9488_COLOR_BLACK, 2);
 }
 
 void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
@@ -958,20 +961,42 @@ void Low_priority(void *argument)
 
     if(LCD_refresh_count%50 == 0)
     {
-      if(touch_process(&touch_lcd, &module_status.lcd_page))
+      uint8_t r = touch_process(&touch_lcd, &module_status.lcd_page);
+      if(r >= STATE_BUTTONS_OFFSET && r < STATE_BUTTONS_OFFSET + LOAD_CONTROL_RELAY4)
       {
+        uint8_t j = r - STATE_BUTTONS_OFFSET;
+        load_state[j] ^= 1;
+        load_control(j, load_state[j] ? RELAY_ON : RELAY_OFF);
+        LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
+          btns[j].text, load_state[j]);
+      }
+      else if(r == 1)
+      {
+        Set_SPI_Speed(SPI_BAUDRATEPRESCALER_2);
         LCD_refresh_count = 0;
         /// reinit page
         for (int i = 0; i < 3; i++)
         {
-          LCD_draw_tab_button(&lcd, tabs[i].x, tabs[i].w, tabs[i].text, i == module_status.lcd_page);
+          //LCD_draw_tab_button(&lcd, tabs[i].x, tabs[i].w, tabs[i].text, i == module_status.lcd_page);
+          LCD_draw_button(&lcd, tabs[i].x, tabs[i].w, TAB_Y, TAB_H,
+            tabs[i].text, i == module_status.lcd_page);
         }
         ILI9488_FillRect(&lcd, 0, 60, 480, 273, ILI9488_COLOR_BLACK);
-        if(module_status.lcd_page == MEASURE_PAGE)
+        
+        switch(module_status.lcd_page)
         {
+        case ABOUT_PAGE:
+          display_about_page();
+          break;
+        case SETTING_PAGE:
+          break;
+        case MEASURE_PAGE:
+        default:
           display_measure_page();
+          break;
         }
-        if(module_status.lcd_page == ABOUT_PAGE)  display_about_page();
+
+        Set_SPI_Speed(SPI_BAUDRATEPRESCALER_16);
       }
     }
     osDelay(2);
@@ -1008,57 +1033,57 @@ void Data_Acquisition(void *argument)
     LogRecord_data.timestamp = DS3231_ToUnixTimestamp(&td) + (uint32_t)(os_time_elapsed/1000);
     LogRecord_data.timestamp_ms = (uint16_t)(os_time_elapsed%1000);
 
-    // if (ADS1115_IsDataReady())
-    // {
-    //   if(cell_id%2 == 1) // discard first sample after switch channel
-    //   {
-	  //     LogRecord_data.cell_id = cell_id/2 + 1;
+    if (ADS1115_IsDataReady())
+    {
+      if(cell_id%2 == 1) // discard first sample after switch channel
+      {
+	      LogRecord_data.cell_id = cell_id/2 + 1;
         
-    //     ADS1115_ReadResult(&ads1115a, &discard_measusement);
-    //     LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id - 1][0]) / calib_coeff[LogRecord_data.cell_id - 1][1];
-    //     //ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
-    //     on_new_sample(&LogRecord_data);
-    //   }
-    //   else ADS1115_ReadResult(&ads1115a, &discard_measusement);
-    //   cell_id--;
+        ADS1115_ReadResult(&ads1115a, &discard_measusement);
+        LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id - 1][0]) / calib_coeff[LogRecord_data.cell_id - 1][1];
+        //ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
+        on_new_sample(&LogRecord_data);
+      }
+      else ADS1115_ReadResult(&ads1115a, &discard_measusement);
+      cell_id--;
 
-    //   //Calibration code modification BEGIN
-    //   if(module_status.channel_calib_settings != 0)
-    //   {
-    //     cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
-    //     //cell_id_prev = cell_id + 1; //8;
+      //Calibration code modification BEGIN
+      if(module_status.channel_calib_settings != 0)
+      {
+        cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
+        //cell_id_prev = cell_id + 1; //8;
 
-    //     if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
-    //     {
-    //       module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
-    //       cell_id = module_status.channel_calib_settings*2;
-    //     }
-    //   }
-    //   //Calibration code modification END
-    //   switch (cell_id)
-    //   {
-    //   case 2:
-    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
-    //     break;
-    //   case 4:
-    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
-    //     break;
-    //   case 6:
-    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
-    //     break;
-    //   case 0:
-	  //   cell_id = 8; //if cell_id = 0 -> cell_id = 4
-    //     ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
-    //     break;
-    //   }
-    // }
+        if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
+        {
+          module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
+          cell_id = module_status.channel_calib_settings*2;
+        }
+      }
+      //Calibration code modification END
+      switch (cell_id)
+      {
+      case 2:
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_0);
+        break;
+      case 4:
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_1);
+        break;
+      case 6:
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_2);
+        break;
+      case 0:
+	    cell_id = 8; //if cell_id = 0 -> cell_id = 4
+        ADS1115_StartConversion(&ads1115a, ADS1115_CH_3);
+        break;
+      }
+    }
 
      if (INA226_data_ready)
      {
        INA226_data_ready = false;
        INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
-      //  INA226_ReadShuntVoltage(&ina226, &shunt_v);
-       INA226_ReadCurrent(&ina226, &LogRecord_data.current_A);
+       INA226_ReadCurrent(&ina226, &discard_measusement);
+       LogRecord_data.current_A = (discard_measusement - calib_coeff[4][0])/calib_coeff[4][1];
        INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
        on_new_sample(&LogRecord_data);
      }
