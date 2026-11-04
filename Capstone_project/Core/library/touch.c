@@ -129,8 +129,10 @@ uint8_t touch_process(Touch_Handle_t * touch_lcd, uint8_t *active_tab)
                 //if (btns[i].tab_id == *active_tab)
                 if (p[0].y >= btns[i].y && p[0].y < btns[i].y + btns[i].h
                 && p[0].x >= btns[i].x && p[0].x < btns[i].x + btns[i].w)
-                    changed = j + STATE_BUTTONS_OFFSET;
-                    break;
+                	{
+						changed = j + STATE_BUTTONS_OFFSET;
+						break;
+                	}
                 }
         }
     }
