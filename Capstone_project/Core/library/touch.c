@@ -127,8 +127,8 @@ uint8_t touch_process(Touch_Handle_t * touch_lcd, uint8_t *active_tab)
         } else if (*active_tab == MEASURE_PAGE) {
             for (int j = 0; j < LOAD_CONTROL_RELAY4; j++) {
                 //if (btns[i].tab_id == *active_tab)
-                if (p[0].y >= btns[i].y && p[0].y < btns[i].y + btns[i].h
-                && p[0].x >= btns[i].x && p[0].x < btns[i].x + btns[i].w)
+                if (p[0].y >= btns[j].y && p[0].y < btns[j].y + btns[j].h
+                && p[0].x >= btns[j].x && p[0].x < btns[j].x + btns[j].w)
                 	{
 						changed = j + STATE_BUTTONS_OFFSET;
 						break;

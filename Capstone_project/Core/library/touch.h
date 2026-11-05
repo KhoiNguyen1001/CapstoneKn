@@ -32,10 +32,10 @@ static const Tab_t tabs[3] = {
 };
 
 static const Button_t btns[LOAD_CONTROL_RELAY4] = {
-    {   5, 100, 405 , 30 , "Load 1" , ABOUT_PAGE },
-    { 110, 100, 405 , 30 , "Load 2" , ABOUT_PAGE },
-    {   5, 100, 440 , 30 , "Load 3" , ABOUT_PAGE },
-    { 110, 100, 440 , 30 , "Load 4" , ABOUT_PAGE },
+    {   5, 150, 400 , 35 , "Load 1" , MEASURE_PAGE },
+    { 160, 150, 400 , 35 , "Load 2" , MEASURE_PAGE },
+    {   5, 150, 440 , 35 , "Load 3" , MEASURE_PAGE },
+    { 160, 150, 440 , 35 , "Load 4" , MEASURE_PAGE },
 };
 
 typedef enum {
