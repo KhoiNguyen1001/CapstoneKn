@@ -813,7 +813,7 @@ void display_measure_page(void)
   ILI9488_Print(&lcd, 15, 315, "Time:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   ILI9488_Print(&lcd, 15, 370, "Load control:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
   
-  for(int i = 0; i < LOAD_CONTROL_RELAY4; i++)
+  for(int j = 0; j < LOAD_CONTROL_RELAY4; j++)
   {
     LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
       btns[j].text, load_state[j]);
@@ -867,16 +867,7 @@ void on_new_sample(LogRecord_t *records) // Run in data acquisitions thread
     active_len = new_len;
   }
 
-  LogRecord_data_LCD.timestamp = LogRecord_data.timestamp;
-  if (records->cell_id != 0) // make sure we only update the LCD with cell voltage if it's a cell voltage record
-  {
-    LogRecord_data_LCD.cell_id = records->cell_id;
-    LogRecord_data_LCD.cell_voltage_V = records->cell_voltage_V;
-  }
-  else { // if it's a bus voltage/current record, update the LCD with those values
-    LogRecord_data_LCD.bus_voltage_V = records->bus_voltage_V;
-    LogRecord_data_LCD.current_A = records->current_A;
-  }
+  LogRecord_data_LCD.timestamp = records->timestamp;
   memset(records,0,sizeof(LogRecord_t));// clear record
 }
 
@@ -928,15 +919,15 @@ void Low_priority(void *argument)
     logging_task();
 
     LCD_refresh_count++;
-    if(LogRecord_data_LCD.cell_voltage_V <= 2.60f && load_state[0] && load_state[1]
-     && load_state[2] && load_state[3]) {
-      memset(&load_state, 0, sizeof(load_state));
-      load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
-      for(int i = 0; i < LOAD_CONTROL_RELAY4; i++)
-      {
-        LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
-          btns[j].text, load_state[j]);
-      }
+    if(LogRecord_data_LCD.cell_voltage_V <= 2.60f)
+    	if(load_state[0] && load_state[1] && load_state[2] && load_state[3]) {
+		  memset(&load_state, 0, sizeof(load_state));
+		  load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
+		  for(int j = 0; j < LOAD_CONTROL_RELAY4; j++)
+		  {
+			LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
+			  btns[j].text, load_state[j]);
+		  }
     }
     if (LCD_refresh_count > 100)
     {
@@ -983,7 +974,7 @@ void Low_priority(void *argument)
       {
         uint8_t j = r - STATE_BUTTONS_OFFSET;
         load_state[j] ^= 1;
-        load_control(j, load_state[j] ? RELAY_ON : RELAY_OFF);
+        load_control(j+LOAD_CONTROL_RELAY1, load_state[j] ? RELAY_ON : RELAY_OFF);
         LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
           btns[j].text, load_state[j]);
       }
@@ -1058,24 +1049,26 @@ void Data_Acquisition(void *argument)
         
         ADS1115_ReadResult(&ads1115a, &discard_measusement);
         LogRecord_data.cell_voltage_V = (discard_measusement - calib_coeff[LogRecord_data.cell_id - 1][0]) / calib_coeff[LogRecord_data.cell_id - 1][1];
+        LogRecord_data_LCD.cell_id = LogRecord_data.cell_id;
+        LogRecord_data_LCD.cell_voltage_V = LogRecord_data.cell_voltage_V;
         //ADS1115_ReadResult(&ads1115a, &LogRecord_data.cell_voltage_V);
-        on_new_sample(&LogRecord_data);
+        //on_new_sample(&LogRecord_data);
       }
       else ADS1115_ReadResult(&ads1115a, &discard_measusement);
       cell_id--;
 
-      //Calibration code modification BEGIN
-      if(module_status.channel_calib_settings != 0)
-      {
-        cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
-        //cell_id_prev = cell_id + 1; //8;
-
-        if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
-        {
-          module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
-          cell_id = module_status.channel_calib_settings*2;
-        }
-      }
+//      //Calibration code modification BEGIN
+//      if(module_status.channel_calib_settings != 0)
+//      {
+//        cell_id = module_status.channel_calib_settings*2 - 1; //7; // fixed cell_id
+//        //cell_id_prev = cell_id + 1; //8;
+//
+//        if(module_status.channel_calib_settings != module_status.channel_calib_settings_cached)
+//        {
+//          module_status.channel_calib_settings_cached = module_status.channel_calib_settings;
+//          cell_id = module_status.channel_calib_settings*2;
+//        }
+//      }
       //Calibration code modification END
       switch (cell_id)
       {
@@ -1095,15 +1088,20 @@ void Data_Acquisition(void *argument)
       }
     }
 
-     if (INA226_data_ready)
-     {
-       INA226_data_ready = false;
-       INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
-       INA226_ReadCurrent(&ina226, &discard_measusement);
-       LogRecord_data.current_A = (discard_measusement - calib_coeff[4][0])/calib_coeff[4][1];
-       INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
-       on_new_sample(&LogRecord_data);
-     }
+	if (INA226_data_ready)
+	{
+		INA226_data_ready = false;
+		INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
+		INA226_ReadCurrent(&ina226, &discard_measusement);
+		LogRecord_data.current_A = (discard_measusement - calib_coeff[4][0])/calib_coeff[4][1];
+		INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
+
+    LogRecord_data_LCD.bus_voltage_V = LogRecord_data.bus_voltage_V;
+    LogRecord_data_LCD.current_A = LogRecord_data.current_A;
+		on_new_sample(&LogRecord_data);
+	} else if (LogRecord_data.cell_id != 0) {
+		on_new_sample(&LogRecord_data);
+	}
 
     if(os_time_elapsed >= 900000)
     {
