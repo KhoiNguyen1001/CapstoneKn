@@ -919,7 +919,7 @@ void Low_priority(void *argument)
     logging_task();
 
     LCD_refresh_count++;
-    if(LogRecord_data_LCD.cell_voltage_V <= 2.60f)
+    if(LogRecord_data_LCD.cell_voltage_V <= CUTOFF_CELL_VOLTAGE)
     	if(load_state[0] && load_state[1] && load_state[2] && load_state[3]) {
 		  memset(&load_state, 0, sizeof(load_state));
 		  load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
@@ -970,7 +970,7 @@ void Low_priority(void *argument)
     {
       uint8_t r = touch_process(&touch_lcd, &module_status.lcd_page);
       if(r >= STATE_BUTTONS_OFFSET && r < STATE_BUTTONS_OFFSET + LOAD_CONTROL_RELAY4
-        && LogRecord_data_LCD.cell_voltage_V >= 2.60f)
+        && LogRecord_data_LCD.cell_voltage_V >= CUTOFF_CELL_VOLTAGE)
       {
         uint8_t j = r - STATE_BUTTONS_OFFSET;
         load_state[j] ^= 1;

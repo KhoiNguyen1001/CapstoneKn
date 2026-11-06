@@ -132,6 +132,8 @@ void Error_Handler(void);
 #define LOAD_CONTROL_RELAY_ALL 5
 #define RELAY_ON GPIO_PIN_RESET
 #define RELAY_OFF GPIO_PIN_SET
+
+static const float CUTOFF_CELL_VOLTAGE = 3.00f;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
