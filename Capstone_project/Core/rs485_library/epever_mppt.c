@@ -72,22 +72,17 @@ static inline uint16_t extract_bits(uint16_t value, uint8_t shift, uint16_t mask
     return (uint16_t)((value >> shift) & mask);
 }
 
-static inline uint16_t swap_bytes16(uint16_t v)
-{
-    return (uint16_t)((v << 8) | (v >> 8));
-}
-
 /**
- * Reconstructs a 32-bit value from two consecutive registers using the
- * byte order EPEVER controllers use for their multi-register real-time
- * values: each register's two bytes are swapped, then the (now byte-
- * swapped) first register becomes the high 16 bits and the second becomes
- * the low 16 bits. Equivalent to minimalmodbus's BYTEORDER_LITTLE_SWAP.
- * See the header comment for the "verify on real hardware" note.
+ * Reconstructs a 32-bit value from two consecutive registers. EPEVER stores
+ * 32-bit quantities low word first: the register at the lower address (e.g.
+ * 0x3102) is the LOW 16 bits and the next one (0x3103) is the HIGH 16 bits.
+ * Each register is a normal big-endian Modbus register -- no byte swapping.
+ * Equivalent to minimalmodbus's BYTEORDER_LITTLE_SWAP (verified against the
+ * library itself: regs [0x2345, 0x0001] -> 74565).
  */
-static uint32_t decode_u32(uint16_t reg0, uint16_t reg1)
+static uint32_t decode_u32(uint16_t reg_low, uint16_t reg_high)
 {
-    return ((uint32_t)swap_bytes16(reg0) << 16) | swap_bytes16(reg1);
+    return ((uint32_t)reg_high << 16) | reg_low;
 }
 
 static Modbus_Status_t read_input_reg_raw(Epever_Handle_t *h, uint16_t addr, uint16_t *raw)
@@ -139,13 +134,11 @@ static Modbus_Status_t read_long_input(Epever_Handle_t *h, uint16_t addr, bool i
         return st;
     }
     uint32_t raw = decode_u32(regs[0], regs[1]);
-    int32_t v = is_signed ? (int32_t)raw : (int32_t)(raw & 0x7FFFFFFFu) + (int32_t)((raw >> 31) ? 0 : 0); /* raw treated as unsigned below */
-    if (!is_signed) {
-        *out = scale_down((int32_t)raw, decimals); /* safe: all EPEVER unsigned longs fit in int32 range */
-        return MODBUS_OK;
+    float value = is_signed ? (float)(int32_t)raw : (float)raw;
+    for (uint8_t i = 0; i < decimals; i++) {
+        value /= 10.0f;
     }
-    (void)v;
-    *out = scale_down((int32_t)raw, decimals);
+    *out = value;
     return MODBUS_OK;
 }
 
@@ -158,6 +151,9 @@ static Modbus_Status_t read_u16_holding(Epever_Handle_t *h, uint16_t addr, uint1
 {
     return read_holding_reg_raw(h, addr, out);
 }
+
+_Static_assert(sizeof(Epever_BatteryVoltageControlPoints_t) == 12 * sizeof(float),
+               "voltage control struct must be 12 packed floats (accessed as an array)");
 
 /* ==================== public API ======================================== */
 
@@ -319,10 +315,10 @@ Modbus_Status_t Epever_GetBatteryStatus(Epever_Handle_t *h, Epever_BatteryStatus
     if (st != MODBUS_OK) {
         return st;
     }
-    out->wrong_identification_for_rated_voltage = extract_bits(raw, 15, 0b1) != 0;
-    out->battery_inner_resistance_abnormal = extract_bits(raw, 8, 0b1) != 0;
-    out->temperature_warning_status = (Epever_TemperatureWarning_t)extract_bits(raw, 4, 0b111);
-    out->battery_status = (Epever_BatteryStatus_t)extract_bits(raw, 0, 0b111);
+    out->wrong_identification_for_rated_voltage = extract_bits(raw, 15, 0x1) != 0;
+    out->battery_inner_resistance_abnormal = extract_bits(raw, 8, 0x1) != 0;
+    out->temperature_warning_status = (Epever_TemperatureWarning_t)extract_bits(raw, 4, 0x7);
+    out->battery_status = (Epever_BatteryStatus_t)extract_bits(raw, 0, 0x7);
     return MODBUS_OK;
 }
 
@@ -333,22 +329,22 @@ Modbus_Status_t Epever_GetChargingEquipmentStatus(Epever_Handle_t *h, Epever_Cha
     if (st != MODBUS_OK) {
         return st;
     }
-    out->input_voltage_status = (Epever_ChargingInputVoltageStatus_t)extract_bits(raw, 14, 0b11);
-    out->charging_mosfet_short_circuit = extract_bits(raw, 13, 0b1) != 0;
-    out->charging_or_antireverse_mosfet_open_circuit = extract_bits(raw, 12, 0b1) != 0;
-    out->antireverse_mosfet_short_circuit = extract_bits(raw, 11, 0b1) != 0;
-    out->input_over_current = extract_bits(raw, 10, 0b1) != 0;
-    out->load_over_current = extract_bits(raw, 9, 0b1) != 0;
-    out->load_short_circuit = extract_bits(raw, 8, 0b1) != 0;
-    out->load_mosfet_short_circuit = extract_bits(raw, 7, 0b1) != 0;
-    out->disequilibrium_in_three_circuits = extract_bits(raw, 6, 0b1) != 0;
-    out->pv_input_short_circuit = extract_bits(raw, 4, 0b1) != 0;
-    out->charging_status = (Epever_ChargingStatus_t)extract_bits(raw, 2, 0b11);
+    out->input_voltage_status = (Epever_ChargingInputVoltageStatus_t)extract_bits(raw, 14, 0x3);
+    out->charging_mosfet_short_circuit = extract_bits(raw, 13, 0x1) != 0;
+    out->charging_or_antireverse_mosfet_open_circuit = extract_bits(raw, 12, 0x1) != 0;
+    out->antireverse_mosfet_short_circuit = extract_bits(raw, 11, 0x1) != 0;
+    out->input_over_current = extract_bits(raw, 10, 0x1) != 0;
+    out->load_over_current = extract_bits(raw, 9, 0x1) != 0;
+    out->load_short_circuit = extract_bits(raw, 8, 0x1) != 0;
+    out->load_mosfet_short_circuit = extract_bits(raw, 7, 0x1) != 0;
+    out->disequilibrium_in_three_circuits = extract_bits(raw, 6, 0x1) != 0;
+    out->pv_input_short_circuit = extract_bits(raw, 4, 0x1) != 0;
+    out->charging_status = (Epever_ChargingStatus_t)extract_bits(raw, 2, 0x3);
     /* Per the reference implementation this fault bit is unreliable on
      * real hardware (reports fault even when there isn't one) -- exposed
      * as-is; don't rely on it alone to detect faults. */
-    out->fault = extract_bits(raw, 1, 0b1) != 0;
-    out->running = extract_bits(raw, 0, 0b1) != 0;
+    out->fault = extract_bits(raw, 1, 0x1) != 0;
+    out->running = extract_bits(raw, 0, 0x1) != 0;
     return MODBUS_OK;
 }
 
@@ -359,18 +355,18 @@ Modbus_Status_t Epever_GetDischargingEquipmentStatus(Epever_Handle_t *h, Epever_
     if (st != MODBUS_OK) {
         return st;
     }
-    out->input_voltage_status = (Epever_DischargingInputStatus_t)extract_bits(raw, 14, 0b11);
-    out->output_power_load = (Epever_OutputPowerLoad_t)extract_bits(raw, 12, 0b11);
-    out->short_circuit = extract_bits(raw, 11, 0b1) != 0;
-    out->unable_to_discharge = extract_bits(raw, 10, 0b1) != 0;
-    out->unable_to_stop_discharging = extract_bits(raw, 9, 0b1) != 0;
-    out->output_voltage_abnormal = extract_bits(raw, 8, 0b1) != 0;
-    out->input_over_voltage = extract_bits(raw, 7, 0b1) != 0;
-    out->short_circuit_in_high_voltage_side = extract_bits(raw, 6, 0b1) != 0;
-    out->boost_over_voltage = extract_bits(raw, 5, 0b1) != 0;
-    out->output_over_voltage = extract_bits(raw, 4, 0b1) != 0;
-    out->fault = extract_bits(raw, 1, 0b1) != 0;
-    out->running = extract_bits(raw, 0, 0b1) != 0;
+    out->input_voltage_status = (Epever_DischargingInputStatus_t)extract_bits(raw, 14, 0x3);
+    out->output_power_load = (Epever_OutputPowerLoad_t)extract_bits(raw, 12, 0x3);
+    out->short_circuit = extract_bits(raw, 11, 0x1) != 0;
+    out->unable_to_discharge = extract_bits(raw, 10, 0x1) != 0;
+    out->unable_to_stop_discharging = extract_bits(raw, 9, 0x1) != 0;
+    out->output_voltage_abnormal = extract_bits(raw, 8, 0x1) != 0;
+    out->input_over_voltage = extract_bits(raw, 7, 0x1) != 0;
+    out->short_circuit_in_high_voltage_side = extract_bits(raw, 6, 0x1) != 0;
+    out->boost_over_voltage = extract_bits(raw, 5, 0x1) != 0;
+    out->output_over_voltage = extract_bits(raw, 4, 0x1) != 0;
+    out->fault = extract_bits(raw, 1, 0x1) != 0;
+    out->running = extract_bits(raw, 0, 0x1) != 0;
     return MODBUS_OK;
 }
 
@@ -445,8 +441,8 @@ Modbus_Status_t Epever_GetTemperatureCompensationCoefficient(Epever_Handle_t *h,
 
 Modbus_Status_t Epever_SetTemperatureCompensationCoefficient(Epever_Handle_t *h, float coefficient)
 {
-    uint16_t raw = (uint16_t)(coefficient * 100.0f + (coefficient >= 0 ? 0.5f : -0.5f));
-    return Modbus_WriteSingleRegister(h->rs485, h->slave_address, REG_TEMP_COMPENSATION_COEF, raw, h->timeout_ms);
+    int16_t raw = (int16_t)(coefficient * 100.0f + (coefficient >= 0 ? 0.5f : -0.5f));
+    return Modbus_WriteSingleRegister(h->rs485, h->slave_address, REG_TEMP_COMPENSATION_COEF, (uint16_t)raw, h->timeout_ms);
 }
 
 Modbus_Status_t Epever_GetBatteryRatedVoltageSetting(Epever_Handle_t *h, Epever_RatedVoltage_t *setting)

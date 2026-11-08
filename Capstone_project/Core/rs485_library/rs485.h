@@ -26,10 +26,6 @@
 #ifndef RS485_H
 #define RS485_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Pull in the right HAL header for your family. Adjust/add the branch for
  * your target if it isn't listed, or just keep the main.h fallback, which
  * is what a standard CubeMX-generated project already includes. */
@@ -58,6 +54,10 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** Bus wiring / usage mode. See file header comment for details. */
 typedef enum {

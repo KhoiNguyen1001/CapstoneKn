@@ -57,7 +57,7 @@ I2C_HandleTypeDef hi2c2;
 I2C_HandleTypeDef hi2c3;
 
 SPI_HandleTypeDef hspi1;
-SPI_HandleTypeDef hspi3;
+//SPI_HandleTypeDef hspi3;
 DMA_HandleTypeDef hdma_spi1_tx;
 
 UART_HandleTypeDef huart4;
@@ -83,7 +83,6 @@ const osMutexAttr_t myMutex01_attributes = {
   .name = "myMutex01"
 };
 /* USER CODE BEGIN PV */
-float shunt_v;
 module_status_t module_status;
 ILI9488_HandleTypeDef lcd;
 Touch_Handle_t touch_lcd;
@@ -106,7 +105,7 @@ char log_buffer_B[LOG_BUFFER_SIZE];
 char buffer[30];
 char current_filename[16];
 
-uint32_t sample_count = 0;
+uint16_t sample_count = 0;
 char *active_buf = log_buffer_A;
 char *flush_buf = NULL;
 size_t active_len = 0;
@@ -117,7 +116,7 @@ const float calib_coeff [5][2] = {
   {-0.00384422, 0.51045767},
   {-0.00305992, 0.51049206}, 
   {-0.00310162, 0.51049930},
-  { 0.000087366, 0.51055476}, //Channel 4 -> [3]
+  { 0.000071439, 0.51056543}, //Channel 4 -> [3] 
   {-0.000409116, 0.99740239}  // current calib
 };
 
@@ -132,7 +131,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_I2C3_Init(void);
-static void MX_SPI3_Init(void);
+// static void MX_SPI3_Init(void);
 static void MX_UART4_Init(void);
 void Low_priority(void *argument);
 void Data_Acquisition(void *argument);
@@ -193,7 +192,7 @@ int main(void)
   MX_I2C1_Init();
   MX_I2C2_Init();
   MX_I2C3_Init();
-  MX_SPI3_Init();
+  //MX_SPI3_Init();
   MX_UART4_Init();
   /* USER CODE BEGIN 2 */
   load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
@@ -209,6 +208,13 @@ int main(void)
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
 
+  Epever_Handle_t mppt_1;
+  RS485_Handle_t rs485_com;
+  float bus_volt;
+  RS485_Init(&rs485_com,&huart4,RS485_MODE_FULL_DUPLEX,RS485_DE_GPIO_Port,RS485_DE_Pin,
+  GPIO_PIN_SET, RS485_RE_GPIO_Port, RS485_RE_Pin,GPIO_PIN_RESET);
+  Epever_Init(&mppt_1,&rs485_com,1,100);
+  Epever_GetBatteryVoltage(&mppt_1,&bus_volt);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -502,40 +508,40 @@ static void MX_SPI1_Init(void)
   * @param None
   * @retval None
   */
-static void MX_SPI3_Init(void)
-{
-
-  /* USER CODE BEGIN SPI3_Init 0 */
-
-  /* USER CODE END SPI3_Init 0 */
-
-  /* USER CODE BEGIN SPI3_Init 1 */
-
-  /* USER CODE END SPI3_Init 1 */
-  /* SPI3 parameter configuration*/
-  hspi3.Instance = SPI3;
-  hspi3.Init.Mode = SPI_MODE_MASTER;
-  hspi3.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi3.Init.DataSize = SPI_DATASIZE_4BIT;
-  hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi3.Init.NSS = SPI_NSS_SOFT;
-  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi3.Init.CRCPolynomial = 7;
-  hspi3.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi3.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-  if (HAL_SPI_Init(&hspi3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI3_Init 2 */
-
-  /* USER CODE END SPI3_Init 2 */
-
-}
+//static void MX_SPI3_Init(void)
+//{
+//
+//  /* USER CODE BEGIN SPI3_Init 0 */
+//
+//  /* USER CODE END SPI3_Init 0 */
+//
+//  /* USER CODE BEGIN SPI3_Init 1 */
+//
+//  /* USER CODE END SPI3_Init 1 */
+//  /* SPI3 parameter configuration*/
+//  hspi3.Instance = SPI3;
+//  hspi3.Init.Mode = SPI_MODE_MASTER;
+//  hspi3.Init.Direction = SPI_DIRECTION_2LINES;
+//  hspi3.Init.DataSize = SPI_DATASIZE_4BIT;
+//  hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
+//  hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
+//  hspi3.Init.NSS = SPI_NSS_SOFT;
+//  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+//  hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
+//  hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
+//  hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+//  hspi3.Init.CRCPolynomial = 7;
+//  hspi3.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+//  hspi3.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+//  if (HAL_SPI_Init(&hspi3) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//  /* USER CODE BEGIN SPI3_Init 2 */
+//
+//  /* USER CODE END SPI3_Init 2 */
+//
+//}
 
 /**
   * @brief UART4 Initialization Function
@@ -904,7 +910,7 @@ void logging_task(void) // Run in low priority thread
 void Low_priority(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  static uint8_t LCD_refresh_count = 0;
+  static uint8_t LCD_refresh_count = 0, cutoff_load_cnt = 0;
   Set_SPI_Speed(SPI_BAUDRATEPRESCALER_128);
   HAL_Delay(500);
   sd_mount();
@@ -920,14 +926,10 @@ void Low_priority(void *argument)
 
     LCD_refresh_count++;
     if(LogRecord_data_LCD.cell_voltage_V <= CUTOFF_CELL_VOLTAGE)
-    	if(load_state[0] && load_state[1] && load_state[2] && load_state[3]) {
-		  memset(&load_state, 0, sizeof(load_state));
-		  load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
-		  for(int j = 0; j < LOAD_CONTROL_RELAY4; j++)
-		  {
-			LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
-			  btns[j].text, load_state[j]);
-		  }
+    	if(load_state[0] || load_state[1] || load_state[2] || load_state[3]) {
+        memset(&load_state, 0, sizeof(load_state));
+        load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
+        cutoff_load_cnt = 1;
     }
     if (LCD_refresh_count > 100)
     {
@@ -956,6 +958,15 @@ void Low_priority(void *argument)
           default:
             ILI9488_Print(&lcd,120, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
+        }
+
+        if (cutoff_load_cnt >= 1) {
+          cutoff_load_cnt = 0;
+          for(int j = 0; j < LOAD_CONTROL_RELAY4; j++)
+          {
+            LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
+              btns[j].text, load_state[j]);
+          }
         }
       }
       else if(module_status.lcd_page == ABOUT_PAGE)
@@ -1094,10 +1105,10 @@ void Data_Acquisition(void *argument)
 		INA226_ReadMaskEnable(&ina226, &ina226_alert_status); // status & INA226_MASK_CVRF
 		INA226_ReadCurrent(&ina226, &discard_measusement);
 		LogRecord_data.current_A = (discard_measusement - calib_coeff[4][0])/calib_coeff[4][1];
-		INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
-
-    LogRecord_data_LCD.bus_voltage_V = LogRecord_data.bus_voltage_V;
     LogRecord_data_LCD.current_A = LogRecord_data.current_A;
+
+		INA226_ReadBusVoltage(&ina226, &LogRecord_data.bus_voltage_V);
+    LogRecord_data_LCD.bus_voltage_V = LogRecord_data.bus_voltage_V;
 		on_new_sample(&LogRecord_data);
 	} else if (LogRecord_data.cell_id != 0) {
 		on_new_sample(&LogRecord_data);

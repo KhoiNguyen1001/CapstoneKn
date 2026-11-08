@@ -82,9 +82,9 @@ size_t csv_append_sample(char *buf, size_t buf_size, size_t current_offset, LogR
   char *start = buf + current_offset;
   size_t avail = buf_size - current_offset;
 
-  uint32_t cell_x10uV = (uint32_t)(records->cell_voltage_V * 10000000.0f);
+  uint32_t cell_x10uV = (uint32_t)(records->cell_voltage_V * 1000000.0f);
   uint32_t bus_uV     = (uint32_t)(records->bus_voltage_V  * 1000000.0f);
-  int32_t cur_uA      = (int32_t)(records->current_A       * 10000000.0f);
+  int32_t cur_uA      = (int32_t)(records->current_A       * 1000000.0f);
   
   int len = snprintf(start, avail,
                     // "%lu.%03u,%.7f,%u\r\n",

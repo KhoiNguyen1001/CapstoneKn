@@ -4,7 +4,7 @@
  *          transceiver driver. Not tied to EPEVER in any way -- usable for
  *          any Modbus RTU slave device.
  *
- * Supports the four function codes needed by most simple instruments:
+ * Supports the function codes needed by most simple instruments:
  *   - 0x02 Read Discrete Inputs
  *   - 0x03 Read Holding Registers
  *   - 0x04 Read Input Registers
