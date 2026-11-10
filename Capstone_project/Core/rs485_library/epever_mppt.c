@@ -164,6 +164,30 @@ void Epever_Init(Epever_Handle_t *h, RS485_Handle_t *rs485, uint8_t slave_addres
     h->timeout_ms = timeout_ms;
 }
 
+Modbus_Status_t Epever_ScanForSlaves(RS485_Handle_t *rs485, uint8_t first, uint8_t last,
+                                     uint32_t timeout_ms, uint8_t *found, uint8_t max_found,
+                                     uint8_t *count)
+{
+    if (rs485 == NULL || found == NULL || count == NULL ||
+        first < 1 || last > 247 || first > last) {
+        return MODBUS_ERR_BUFFER_TOO_SMALL;
+    }
+ 
+    *count = 0;
+    for (uint16_t addr = first; addr <= last; addr++) {
+        uint16_t dummy;
+        Modbus_Status_t st = Modbus_ReadInputRegisters(rs485, (uint8_t)addr, REG_PV_VOLTAGE, 1, &dummy, timeout_ms);
+        if (st == MODBUS_OK || st == MODBUS_ERR_EXCEPTION) {
+            if (*count < max_found) {
+                found[(*count)++] = (uint8_t)addr;
+            } else {
+                break; /* result array full */
+            }
+        }
+    }
+    return MODBUS_OK;
+}
+
 /* --- real-time data --- */
 
 Modbus_Status_t Epever_GetSolarVoltage(Epever_Handle_t *h, float *volts)

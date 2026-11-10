@@ -12,15 +12,11 @@
  * real-time data, status flags, and settings. Add more Epever_Get/Set
  * functions the same way if you need other registers.
  *
- * IMPORTANT -- verify on real hardware: the 32-bit values (power, energy
- * counters, battery current) use a "byte-swapped, word order preserved"
- * encoding across their two registers (documented in epever_mppt.c next
- * to decode_u32()). This has been worked out from the source library's
- * documented byte-order setting, not from an EPEVER datasheet directly --
- * double check a couple of readings (e.g. get_generated_energy_today
- * against the controller's own display, if it has one) the first time you
- * bring this up on your board.
- **/
+ * 32-bit values (power, energy counters, battery current) are stored low
+ * word first across two registers (e.g. 0x3102 = low, 0x3103 = high), each a
+ * normal big-endian Modbus register. Still worth cross-checking one or two
+ * readings against the controller's own display on first bring-up.
+ */
 
 #ifndef EPEVER_MPPT_H
 #define EPEVER_MPPT_H
@@ -41,6 +37,28 @@ typedef struct {
 } Epever_Handle_t;
 
 void Epever_Init(Epever_Handle_t *h, RS485_Handle_t *rs485, uint8_t slave_address, uint32_t timeout_ms);
+
+/**
+ * @brief Probe slave addresses first..last (1-247) and report which ones answer.
+ *
+ * Sends one cheap read (input register 0x3100, PV voltage) to each address.
+ * An address counts as present if a valid reply OR a Modbus exception comes
+ * back (an exception still proves a device is there). Silence, bad CRC and
+ * wrong-address replies count as absent.
+ *
+ * Worst case takes (last - first + 1) * (timeout_ms + ~2 ms): 247 addresses at
+ * 50 ms is about 13 s -- feed your watchdog if you have one, or scan a
+ * narrower range first (1..10 covers almost every installation).
+ *
+ * @param found      array that receives the responding addresses
+ * @param max_found  capacity of `found`
+ * @param count      number of addresses written to `found`
+ * @return MODBUS_OK if the scan ran (check *count), MODBUS_ERR_BUFFER_TOO_SMALL
+ *         on a bad range/arguments.
+ */
+Modbus_Status_t Epever_ScanForSlaves(RS485_Handle_t *rs485, uint8_t first, uint8_t last,
+                                     uint32_t timeout_ms, uint8_t *found, uint8_t max_found,
+                                     uint8_t *count);
 
 /* ==================== Real-time data (0x31xx/0x33xx, FC 0x04) ========= */
 

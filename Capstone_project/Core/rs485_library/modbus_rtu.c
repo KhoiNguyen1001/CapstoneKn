@@ -15,19 +15,6 @@ uint8_t Modbus_LastExceptionCode = 0;
 #define MODBUS_INTERFRAME_DELAY_MS 2
 #endif
 
-/** Throw away any stale bytes (late reply to an earlier timed-out request,
- *  line noise) so they can't be mistaken for the start of the next response.
- *  Uses a zero-timeout 1-byte receive so it stays HAL-family independent. */
-static void modbus_drain_rx(RS485_Handle_t *rs485)
-{
-    uint8_t junk;
-    for (uint8_t i = 0; i < 64; i++) {
-        if (RS485_Receive(rs485, &junk, 1, 0) != HAL_OK) {
-            break;
-        }
-    }
-}
-
 uint16_t Modbus_CRC16(const uint8_t *data, uint16_t length)
 {
     uint16_t crc = 0xFFFF;
@@ -68,7 +55,7 @@ static Modbus_Status_t modbus_transceive(RS485_Handle_t *rs485, uint8_t slave_ad
 #if MODBUS_INTERFRAME_DELAY_MS > 0
     HAL_Delay(MODBUS_INTERFRAME_DELAY_MS);
 #endif
-    modbus_drain_rx(rs485);
+    RS485_FlushRx(rs485); /* drop stale bytes and clear overrun/framing flags */
 
     if (RS485_Transmit(rs485, req, req_len, timeout_ms) != HAL_OK) {
         return MODBUS_ERR_TX;

@@ -125,6 +125,27 @@ HAL_StatusTypeDef RS485_Receive_IT(RS485_Handle_t *h, uint8_t *data, uint16_t si
     return HAL_UART_Receive_IT(h->huart, data, size);
 }
 
+void RS485_FlushRx(RS485_Handle_t *h)
+{
+    uint8_t junk;
+
+    __HAL_UART_CLEAR_OREFLAG(h->huart);
+    __HAL_UART_CLEAR_FEFLAG(h->huart);
+    __HAL_UART_CLEAR_NEFLAG(h->huart);
+
+    /* Zero-timeout receive returns HAL_TIMEOUT at once when nothing is
+     * waiting, so this loop ends as soon as the receiver is empty. */
+    for (uint8_t i = 0; i < 64; i++) {
+        if (HAL_UART_Receive(h->huart, &junk, 1, 0) != HAL_OK) {
+            break;
+        }
+    }
+
+    __HAL_UART_CLEAR_OREFLAG(h->huart);
+    __HAL_UART_CLEAR_FEFLAG(h->huart);
+    __HAL_UART_CLEAR_NEFLAG(h->huart);
+}
+
 void RS485_TxCpltCallback(RS485_Handle_t *h)
 {
     /* HAL_UART_TxCpltCallback() only fires once the peripheral's TC flag

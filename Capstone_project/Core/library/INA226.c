@@ -9,7 +9,7 @@
 
 /* Fixed LSBs from the datasheet (do not change) */
 #define INA226_BUS_VOLTAGE_LSB   0.00125f   /* 1.25 mV per bit  */
-#define INA226_SHUNT_VOLTAGE_LSB 0.0000025f /* 2.5 uV per bit   */
+#define INA226_SHUNT_VOLTAGE_LSB 0.0000025f /* 2.5 uV per bit, not check, not used   */
 #define INA226_POWER_LSB_MULT    25.0f      /* power_lsb = 25 * current_lsb */
 
 #define INA226_MANUFACTURER_ID_EXPECTED 0x5449

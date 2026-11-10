@@ -168,6 +168,16 @@ HAL_StatusTypeDef RS485_Transmit_IT(RS485_Handle_t *h, const uint8_t *data, uint
 HAL_StatusTypeDef RS485_Receive_IT(RS485_Handle_t *h, uint8_t *data, uint16_t size);
 
 /**
+ * @brief Clear UART overrun/framing/noise flags and discard any bytes waiting
+ *        in the receiver. Polling receive (HAL_UART_Receive) does not check
+ *        or clear these flags, so a single junk byte or overrun can leave
+ *        reception stuck returning HAL_TIMEOUT until they are cleared. Called
+ *        automatically before every Modbus request; call it yourself after
+ *        any receive error or when bringing up the link.
+ */
+void RS485_FlushRx(RS485_Handle_t *h);
+
+/**
  * @brief Call this from your global HAL_UART_TxCpltCallback(), after
  *        checking huart->Instance matches this handle's UART, whenever
  *        you use RS485_Transmit_IT(). Switches back to receive mode
