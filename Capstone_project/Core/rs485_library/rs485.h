@@ -8,8 +8,10 @@
  *
  *   - RS485_MODE_HALF_DUPLEX : classic 2-wire RS-485 bus (Y/Z shorted to
  *     A/B on the PCB, or any board that needs driver/receiver turnaround).
- *     DE and RE are toggled around every transmit so the driver and
- *     receiver are never both enabled at once.
+ *     DE and RE are toggled around every transmit. The two pins are
+ *     switched one at a time through the "both enabled" state (never through
+ *     the "both disabled" shutdown state of MAX348x/349x parts), so for a few
+ *     nanoseconds both are on at each turnaround.
  *
  *   - RS485_MODE_FULL_DUPLEX : true 4-wire wiring (separate TX and RX
  *     pairs). DE and RE are both enabled once at init and left alone;

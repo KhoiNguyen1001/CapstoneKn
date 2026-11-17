@@ -63,15 +63,20 @@ HAL_StatusTypeDef RS485_Init(RS485_Handle_t *h,
     return HAL_OK;
 }
 
+/* Pin ordering matters on MAX3485/3491-family parts: RE high with DE low puts
+ * the chip into shutdown (guaranteed NOT to shut down only if that state lasts
+ * under 80 ns). Moving between "receive" (DE off, RE on) and "transmit" (DE on,
+ * RE off) one pin at a time therefore has to pass through the "both enabled"
+ * state, never through "both disabled". Both-enabled is harmless here: the
+ * UART's TX line idles high, so the driver just holds the bus in its idle
+ * state while the receiver is still listening. */
 void RS485_SetTransmitMode(RS485_Handle_t *h)
 {
     if (h->duplex_mode == RS485_MODE_FULL_DUPLEX) {
         return; /* both already enabled permanently */
     }
-    /* Disable receiver before enabling driver so we're never listening
-     * and driving the bus at the same time. */
-    rs485_receiver_disable(h);
-    rs485_driver_enable(h);
+    rs485_driver_enable(h);     /* driver on first (receiver still on)...  */
+    rs485_receiver_disable(h);  /* ...then silence the receiver            */
     h->direction = RS485_DIR_TRANSMIT;
 }
 
@@ -80,8 +85,8 @@ void RS485_SetReceiveMode(RS485_Handle_t *h)
     if (h->duplex_mode == RS485_MODE_FULL_DUPLEX) {
         return;
     }
-    rs485_driver_disable(h);
-    rs485_receiver_enable(h);
+    rs485_receiver_enable(h);   /* receiver on first (driver still on, idle)... */
+    rs485_driver_disable(h);    /* ...then release the bus                      */
     h->direction = RS485_DIR_RECEIVE;
 }
 

@@ -208,20 +208,28 @@ int main(void)
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
 
-  // Epever_Handle_t epever;
-  // RS485_Handle_t rs485_com;
-  // float bus_volt;
-  // RS485_Init(&rs485_com,&huart4,RS485_MODE_HALF_DUPLEX,RS485_DE_GPIO_Port,RS485_DE_Pin,
-  // GPIO_PIN_SET, RS485_RE_GPIO_Port, RS485_RE_Pin,GPIO_PIN_RESET);
-  // RS485_FlushRx(&rs485_com);
-
-  // uint8_t found[4], n;
-  // Epever_ScanForSlaves(&rs485_com, 1, 10, 200, found, sizeof(found), &n);
-
-  // Epever_GetBatteryVoltage(&epever,&bus_volt);
+//   Epever_Handle_t epever;
+//   RS485_Handle_t rs485_com;
+//   float bus_volt;
+//   RS485_Init(&rs485_com,&huart4,RS485_MODE_FULL_DUPLEX,RS485_DE_GPIO_Port,RS485_DE_Pin,
+//   GPIO_PIN_SET, RS485_RE_GPIO_Port, RS485_RE_Pin,GPIO_PIN_RESET);
+//   RS485_FlushRx(&rs485_com);
+//
+//   for (uint8_t b = 0x30; b < 0x40; b++) {
+//       uint8_t rx = 0;
+//       HAL_UART_Transmit(&huart4, &b, 1, 10);
+//       HAL_StatusTypeDef s = HAL_UART_Receive(&huart4, &rx, 1, 10);
+//       rx = b;
+//   }
+//   uint8_t found[4], n;
+//   Epever_ScanForSlaves(&rs485_com, 1, 10, 500, found, sizeof(found), &n);
+//
+//   Epever_Init(&epever,&rs485_com,0x01,300);
+//   Epever_GetBatteryVoltage(&epever,&bus_volt);
   /* USER CODE END 2 */
 
   /* Init scheduler */
+
   osKernelInitialize();
   /* Create the mutex(es) */
   /* creation of myMutex01 */
@@ -924,7 +932,7 @@ void logging_task(void) // Run in low priority thread
 void Low_priority(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  static uint8_t LCD_refresh_count = 0, cutoff_load_cnt = 0;
+  static uint8_t LCD_refresh_count = 0, cutoff_load = 0, open_load = 0;
   Set_SPI_Speed(SPI_BAUDRATEPRESCALER_128);
   HAL_Delay(500);
   sd_mount();
@@ -943,17 +951,16 @@ void Low_priority(void *argument)
     	if(load_state[0] || load_state[1] || load_state[2] || load_state[3]) {
         memset(&load_state, 0, sizeof(load_state));
         load_control(LOAD_CONTROL_RELAY_ALL, RELAY_OFF);
-        cutoff_load_cnt = 1;
+        cutoff_load = 1;
     }
     //safe discharge (8A) in case solar switch on (without me monitoring)
-    else if (LogRecord_data_LCD.cell_voltage_V >= SELF_DISCHARGE_CELL_VOLTAGE) {
-        load_state[0] = 1;
-        load_state[1] = 1;
-        load_control(LOAD_CONTROL_RELAY1, RELAY_ON);
-        load_control(LOAD_CONTROL_RELAY2, RELAY_ON);
-        load_control(LOAD_CONTROL_RELAY3, RELAY_OFF);
-        load_control(LOAD_CONTROL_RELAY4, RELAY_OFF);
-        cutoff_load_cnt = 0xf0;
+    if (LogRecord_data_LCD.cell_voltage_V >= SELF_DISCHARGE_CELL_VOLTAGE &&
+    LogRecord_data_LCD.current_A >= SELF_DISCHARGE_CURRENT) {
+      if(!load_state[0] || !load_state[1] || !load_state[2] || !load_state[3]) {
+        memset(&load_state, 1, sizeof(load_state));
+        load_control(LOAD_CONTROL_RELAY_ALL, RELAY_ON);
+        open_load = 1;
+      }
     }
     
     if (LCD_refresh_count > 100)
@@ -985,19 +992,13 @@ void Low_priority(void *argument)
             break;
         }
 
-        if (cutoff_load_cnt == 1) {
-          cutoff_load_cnt = 0;
+        if (cutoff_load == 1 || open_load == 1) {
+          cutoff_load = 0;
           for(int j = 0; j < LOAD_CONTROL_RELAY4; j++)
           {
             LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
               btns[j].text, load_state[j]);
           }
-        }
-        else if (cutoff_load_cnt == 0xf0) {
-          LCD_draw_button(&lcd, btns[0].x, btns[0].w, btns[0].y, btns[0].h,
-              btns[0].text, load_state[0]);
-          LCD_draw_button(&lcd, btns[1].x, btns[1].w, btns[1].y, btns[1].h,
-              btns[1].text, load_state[1]);
         }
       }
       else if(module_status.lcd_page == ABOUT_PAGE)
@@ -1031,17 +1032,16 @@ void Low_priority(void *argument)
           LCD_draw_button(&lcd, tabs[i].x, tabs[i].w, TAB_Y, TAB_H,
             tabs[i].text, i == module_status.lcd_page);
         }
+        ILI9488_FillRect(&lcd, 0, 60, 320 ,480, ILI9488_COLOR_BLACK);
         switch(module_status.lcd_page)
         {
         case ABOUT_PAGE:
-          ILI9488_FillScreen(&lcd, ILI9488_COLOR_BLACK);
           display_about_page();
           break;
         case SETTING_PAGE:
           break;
         case MEASURE_PAGE:
         default:
-          ILI9488_FillRect(&lcd, 0, 60, 480, 273, ILI9488_COLOR_BLACK);
           display_measure_page();
           break;
         }

@@ -134,7 +134,8 @@ void Error_Handler(void);
 #define RELAY_OFF GPIO_PIN_SET
 
 static const float CUTOFF_CELL_VOLTAGE = 3.00f;
-static const float SELF_DISCHARGE_CELL_VOLTAGE = 3.56f;
+static const float SELF_DISCHARGE_CELL_VOLTAGE = 3.63f;
+static const float SELF_DISCHARGE_CURRENT = 1.90f;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

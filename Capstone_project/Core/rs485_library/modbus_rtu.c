@@ -52,9 +52,9 @@ static Modbus_Status_t modbus_transceive(RS485_Handle_t *rs485, uint8_t slave_ad
                                           uint8_t *resp, uint16_t resp_capacity, uint16_t *out_resp_len,
                                           uint16_t fixed_response_len, uint32_t timeout_ms)
 {
-#if MODBUS_INTERFRAME_DELAY_MS > 0
-    HAL_Delay(MODBUS_INTERFRAME_DELAY_MS);
-#endif
+ #if MODBUS_INTERFRAME_DELAY_MS > 0
+     HAL_Delay(MODBUS_INTERFRAME_DELAY_MS);
+ #endif
     RS485_FlushRx(rs485); /* drop stale bytes and clear overrun/framing flags */
 
     if (RS485_Transmit(rs485, req, req_len, timeout_ms) != HAL_OK) {
