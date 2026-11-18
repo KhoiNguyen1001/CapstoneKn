@@ -20,6 +20,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
+#include "test.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -32,8 +33,7 @@
 #include "../library/sd_functions.h"
 #include "../library/data_processing.h"
 #include "../library/DS3231.h"
-#include "../rs485_library/epever_mppt.h"
-#include "../debug_rtc/rtc_uart.h"
+#include "../rs485_library/epever_simple.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -92,6 +92,9 @@ uint16_t ina226_alert_status;
 DS3231_HandleTypeDef DS3231_Handler;
 DS3231_TimeDate td;
 
+EpeverS_t mppt;
+float battery_voltage, PV_voltage, PV_current;
+
 LogRecord_t LogRecord_data;
 LogRecord_t LogRecord_data_LCD;
 
@@ -140,6 +143,7 @@ void Data_Acquisition(void *argument);
 void Set_SPI_Speed(uint32_t prescaler);
 void load_control(uint8_t relay, GPIO_PinState state);
 void LCD_TFT_init(void);
+void display_MPPT_page(void);
 void display_measure_page(void);
 void display_about_page(void);
 
@@ -208,24 +212,16 @@ int main(void)
   module_status.ina226_status = INA226_ReadMaskEnable(&ina226, &ina226_alert_status);
   DS3231_Init(&DS3231_Handler, &hi2c3, DS3231_ADDRESS);
 
-//   Epever_Handle_t epever;
-//   RS485_Handle_t rs485_com;
-//   float bus_volt;
-//   RS485_Init(&rs485_com,&huart4,RS485_MODE_FULL_DUPLEX,RS485_DE_GPIO_Port,RS485_DE_Pin,
-//   GPIO_PIN_SET, RS485_RE_GPIO_Port, RS485_RE_Pin,GPIO_PIN_RESET);
-//   RS485_FlushRx(&rs485_com);
-//
-//   for (uint8_t b = 0x30; b < 0x40; b++) {
-//       uint8_t rx = 0;
-//       HAL_UART_Transmit(&huart4, &b, 1, 10);
-//       HAL_StatusTypeDef s = HAL_UART_Receive(&huart4, &rx, 1, 10);
-//       rx = b;
-//   }
-//   uint8_t found[4], n;
-//   Epever_ScanForSlaves(&rs485_com, 1, 10, 500, found, sizeof(found), &n);
-//
-//   Epever_Init(&epever,&rs485_com,0x01,300);
-//   Epever_GetBatteryVoltage(&epever,&bus_volt);
+  EpeverS_Init(&mppt, &huart4,
+              RS485_DE_GPIO_Port, RS485_DE_Pin,
+              RS485_RE_GPIO_Port, RS485_RE_Pin,
+              1, 200);              /* slave ID 1, 200 ms reply timeout */
+  EpeverS_GetBatteryVoltage(&mppt, &battery_voltage);
+  EpeverS_GetPvVoltage(&mppt, &PV_voltage);
+  EpeverS_GetPvCurrent(&mppt, &PV_current);
+
+
+//  modbus_simple_test();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -815,6 +811,14 @@ void LCD_TFT_init(void)
   display_measure_page();
 }
 
+void display_MPPT_page(void)
+{
+  ILI9488_Print(&lcd, 15, 60, "VBus", ILI9488_COLOR_CYAN, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 95, "PV voltage:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 130, "PV current:", ILI9488_COLOR_YELLOW, ILI9488_COLOR_BLACK, 2);
+  ILI9488_Print(&lcd, 15, 165, "Load current:", ILI9488_COLOR_GREEN, ILI9488_COLOR_BLACK, 2);
+}
+
 void display_measure_page(void)
 {
   ILI9488_FillRect(&lcd, 5, 45, 310, 2, ILI9488_COLOR_DGRAY);
@@ -991,21 +995,33 @@ void Low_priority(void *argument)
             ILI9488_Print(&lcd,120, 255, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
             break;
         }
-
-        if (cutoff_load == 1 || open_load == 1) {
-          cutoff_load = 0;
-          for(int j = 0; j < LOAD_CONTROL_RELAY4; j++)
-          {
-            LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
-              btns[j].text, load_state[j]);
-          }
-        }
       }
       else if(module_status.lcd_page == ABOUT_PAGE)
       {
         sod = LogRecord_data_LCD.timestamp % 86400u;
         sprintf(buffer, "%02d/%02d/%04d  %02d:%02d:%02d", td.day, td.month, td.year, td.hours,(int)((sod % 3600) / 60), (int)(sod % 60));
         ILI9488_Print(&lcd, 80, 240, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      }
+      else {
+        EpeverS_GetBatteryVoltage(&mppt, &battery_voltage);
+        EpeverS_GetPvVoltage(&mppt, &PV_voltage);
+        EpeverS_GetPvCurrent(&mppt, &PV_current);
+        
+        sprintf(buffer, "%.2f v   ", battery_voltage);
+        ILI9488_Print(&lcd,100, 60, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+        sprintf(buffer, "%.2f v   ", PV_voltage);
+        ILI9488_Print(&lcd, 160, 95, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+        sprintf(buffer, "%.2f A   ", PV_current);
+        ILI9488_Print(&lcd, 160, 130, buffer, ILI9488_COLOR_WHITE, ILI9488_COLOR_BLACK, 2);
+      }
+
+      if (cutoff_load == 1 || open_load == 1) {
+        cutoff_load = 0;
+        for(int j = 0; j < LOAD_CONTROL_RELAY4; j++)
+        {
+          LCD_draw_button(&lcd, btns[j].x, btns[j].w, btns[j].y, btns[j].h,
+            btns[j].text, load_state[j]);
+        }
       }
     }
 
@@ -1039,6 +1055,7 @@ void Low_priority(void *argument)
           display_about_page();
           break;
         case SETTING_PAGE:
+          display_MPPT_page();
           break;
         case MEASURE_PAGE:
         default:

@@ -64,8 +64,9 @@ static Modbus_Status_t modbus_transceive(RS485_Handle_t *rs485, uint8_t slave_ad
     /* First 3 bytes are always: address, function code, and either a
      * byte-count (read responses), the high byte of the echoed address
      * (write responses), or the exception code (exception responses). */
-    uint8_t hdr[3];
-    if (RS485_Receive(rs485, hdr, 3, timeout_ms) != HAL_OK) {
+    uint8_t hdr[7];
+    memset(hdr,0,sizeof(hdr));
+    if (RS485_Receive(rs485, hdr, 7, timeout_ms) != HAL_OK) {
         return MODBUS_ERR_RX_TIMEOUT;
     }
 
